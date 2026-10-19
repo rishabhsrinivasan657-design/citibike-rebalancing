@@ -34,7 +34,7 @@ A ✅ means the check has passed. A ⬜ means it hasn't been done yet.
 
 Create the folder, the tools, and these planning documents.
 
-- ✅ The automatic checks run and pass (27 tests).
+- ✅ The automatic checks run and pass (49 tests).
 
 ---
 
@@ -69,7 +69,7 @@ ourselves. Every day we're not recording is data we can never get back.
 ---
 
 ## Step 2: Download past data
-**Status: in progress**
+**Status: done (Oct 19, 2026)**
 
 **What it does:** downloads the information the predictions will learn from, for
 **October 2025 to September 2026** (the 12 most recent months Citi Bike has published):
@@ -99,14 +99,15 @@ any time: months already saved are skipped unless Citi Bike changes the file.
 - A few real station IDs have only one decimal (e.g. `6131.1` is E 24 St & Park
   Ave S), so "one decimal" doesn't mean an ID was damaged.
 
-**Checks**
-- ⬜ For every month, the number of trips we saved equals the number of rows in
-  Citi Bike's files (nothing lost or duplicated).
-- ⬜ No trip appears twice within the same month.
-- ⬜ At least 97% of trips start at a station that matches a station in the live feed.
-- ⬜ Station IDs are stored as text, so `7293.10` can't become `7293.1`.
-- ⬜ Weather has every hour, with no gaps.
-- ⬜ Holidays include the obvious ones (New Year's Day, July 4th, Thanksgiving).
+**Checks** (run on GitHub, Oct 19, 2026)
+- ✅ Trip counts match Citi Bike's files exactly: 45,384,105 trips across all 12 months.
+- ✅ No trip appears twice within the same month. (512 month-end rides appear in two
+  months' files, as expected.)
+- ✅ 98.4% of trips start at a station in the live feed (target 97%). Only 0.06% of
+  trips have no start station at all.
+- ✅ Station IDs are stored as text, so `7293.10` can't become `7293.1`.
+- ✅ Weather has every hour, both versions: 9,192 hours with no gaps.
+- ✅ Holidays include the obvious ones (46 holidays, 2025–2027).
 
 ## Step 3: Organise the data into clean tables
 **Status: not started**
