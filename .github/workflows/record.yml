@@ -1,0 +1,49 @@
+# Records Citi Bike station data around the clock (see docs/DESIGN.md).
+# A new run starts every 2 hours and records for 2 h 45 m, so runs overlap and
+# a late start by GitHub's scheduler doesn't leave a gap.
+name: record
+
+on:
+  schedule:
+    - cron: "17 */2 * * *"
+  workflow_dispatch:
+    inputs:
+      minutes:
+        description: "How many minutes to record"
+        default: "165"
+
+permissions:
+  contents: read
+  actions: write # lets the run re-enable its own schedule (see keep-alive step)
+
+jobs:
+  record:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v3
+      - run: uv sync --frozen --no-dev
+
+      - name: Keep the schedule alive
+        # GitHub pauses scheduled workflows after 60 days without repo activity.
+        run: gh api -X PUT "repos/${{ github.repository }}/actions/workflows/record.yml/enable"
+        env:
+          GH_TOKEN: ${{ github.token }}
+        continue-on-error: true
+
+      - name: Record
+        run: uv run recorder --minutes "${{ inputs.minutes || '165' }}"
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+          HF_REPO: ${{ vars.HF_REPO }}
+          LAKE_URI: ./lake-pending
+
+      - name: Save files that failed to upload
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: lake-pending-${{ github.run_id }}
+          path: lake-pending/
+          retention-days: 7
+          if-no-files-found: ignore

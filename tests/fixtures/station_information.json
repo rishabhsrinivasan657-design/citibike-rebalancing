@@ -1,0 +1,124 @@
+{
+ "data": {
+  "stations": [
+   {
+    "station_id": "754ac5df-f2b5-4636-8c58-ed84ea262bde",
+    "name": "Bailey Ave & Sedgwick Ave",
+    "short_name": "8643.01",
+    "lon": -73.90857,
+    "lat": 40.86571,
+    "region_id": "71",
+    "capacity": 20,
+    "rental_uris": {
+     "android": "https://bkn.lft.to/lastmile_qr_scan",
+     "ios": "https://bkn.lft.to/lastmile_qr_scan"
+    },
+    "rental_methods": [
+     "KEY",
+     "CREDITCARD"
+    ],
+    "has_kiosk": true,
+    "station_type": "classic",
+    "external_id": "754ac5df-f2b5-4636-8c58-ed84ea262bde",
+    "electric_bike_surcharge_waiver": false,
+    "eightd_station_services": [],
+    "eightd_has_key_dispenser": false
+   },
+   {
+    "station_id": "3eb10c63-ea4c-4161-b07d-a29034f7367a",
+    "name": "Brook Ave & E 141 St",
+    "short_name": "7740.08",
+    "lon": -73.917875,
+    "lat": 40.809619,
+    "region_id": "71",
+    "capacity": 0,
+    "rental_uris": {
+     "android": "https://bkn.lft.to/lastmile_qr_scan",
+     "ios": "https://bkn.lft.to/lastmile_qr_scan"
+    },
+    "rental_methods": [
+     "KEY",
+     "CREDITCARD"
+    ],
+    "has_kiosk": true,
+    "station_type": "classic",
+    "external_id": "3eb10c63-ea4c-4161-b07d-a29034f7367a",
+    "electric_bike_surcharge_waiver": false,
+    "eightd_station_services": [],
+    "eightd_has_key_dispenser": false
+   },
+   {
+    "station_id": "ba33c334-e17d-4478-ae3c-9c2f4dbfbb51",
+    "name": "51 Ave & 61 St",
+    "short_name": "5923.02",
+    "lon": -73.90387,
+    "lat": 40.73568,
+    "region_id": "71",
+    "capacity": 0,
+    "rental_uris": {
+     "android": "https://bkn.lft.to/lastmile_qr_scan",
+     "ios": "https://bkn.lft.to/lastmile_qr_scan"
+    },
+    "rental_methods": [
+     "KEY",
+     "CREDITCARD"
+    ],
+    "has_kiosk": true,
+    "station_type": "classic",
+    "external_id": "ba33c334-e17d-4478-ae3c-9c2f4dbfbb51",
+    "electric_bike_surcharge_waiver": false,
+    "eightd_station_services": [],
+    "eightd_has_key_dispenser": false
+   },
+   {
+    "station_id": "06439006-11b6-44f0-8545-c9d39035f32a",
+    "name": "Vesey St & Church St",
+    "short_name": "5216.06",
+    "lon": -74.01047229766846,
+    "lat": 40.71221958009051,
+    "region_id": "71",
+    "capacity": 78,
+    "rental_uris": {
+     "android": "https://bkn.lft.to/lastmile_qr_scan",
+     "ios": "https://bkn.lft.to/lastmile_qr_scan"
+    },
+    "rental_methods": [
+     "KEY",
+     "CREDITCARD"
+    ],
+    "has_kiosk": true,
+    "station_type": "classic",
+    "external_id": "06439006-11b6-44f0-8545-c9d39035f32a",
+    "electric_bike_surcharge_waiver": false,
+    "eightd_station_services": [],
+    "eightd_has_key_dispenser": false
+   },
+   {
+    "station_id": "1986707977001495180",
+    "name": "21 St & 20 Ave",
+    "short_name": "7363.03",
+    "lon": -73.91273114065842,
+    "lat": 40.78393602019729,
+    "region_id": "71",
+    "capacity": 19,
+    "rental_uris": {
+     "android": "https://bkn.lft.to/lastmile_qr_scan",
+     "ios": "https://bkn.lft.to/lastmile_qr_scan"
+    },
+    "rental_methods": [
+     "KEY",
+     "CREDITCARD"
+    ],
+    "has_kiosk": true,
+    "station_type": "classic",
+    "external_id": "1986707977001495180",
+    "electric_bike_surcharge_waiver": false,
+    "eightd_station_services": [],
+    "eightd_has_key_dispenser": false
+   }
+  ]
+ },
+ "last_updated": 1792415478,
+ "ttl": 60,
+ "version": "1.1"
+}

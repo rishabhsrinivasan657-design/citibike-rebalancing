@@ -1,0 +1,48 @@
+[project]
+name = "rebalancer"
+version = "0.1.0"
+description = "Citi Bike stock-out forecasting, rebalancing optimization, and backtesting"
+readme = "README.md"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "confluent-kafka>=2.6",
+    "httpx>=0.27",
+    "huggingface-hub>=0.25",
+    "pyarrow>=17",
+    "pydantic>=2.8",
+    "pydantic-settings>=2.4",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3",
+    "respx>=0.21",
+    "ruff>=0.6",
+]
+
+[project.scripts]
+collector = "rebalancer.ingest.collector:main"
+lake-sink = "rebalancer.ingest.sink:main"
+recorder = "rebalancer.ingest.recorder:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/rebalancer"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "SIM"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = [
+    "live: hits the real Citi Bike GBFS feed",
+    "integration: needs the docker compose stack running",
+]
+addopts = "-m 'not live and not integration'"

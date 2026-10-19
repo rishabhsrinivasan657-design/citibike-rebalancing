@@ -1,0 +1,81 @@
+{
+ "data": {
+  "stations": [
+   {
+    "station_id": "754ac5df-f2b5-4636-8c58-ed84ea262bde",
+    "num_bikes_available": 0,
+    "num_bikes_disabled": 9,
+    "num_docks_available": 11,
+    "num_docks_disabled": 0,
+    "is_installed": 1,
+    "is_renting": 0,
+    "is_returning": 0,
+    "last_reported": 1792295818,
+    "legacy_id": "4603",
+    "num_ebikes_available": 0,
+    "num_scooters_available": 0,
+    "num_scooters_unavailable": 0,
+    "eightd_has_available_keys": false
+   },
+   {
+    "station_id": "3eb10c63-ea4c-4161-b07d-a29034f7367a",
+    "num_bikes_available": 0,
+    "num_bikes_disabled": 0,
+    "num_docks_available": 0,
+    "num_docks_disabled": 0,
+    "is_installed": 0,
+    "is_renting": 0,
+    "is_returning": 0,
+    "last_reported": 86400,
+    "legacy_id": "3950",
+    "num_ebikes_available": 0,
+    "eightd_has_available_keys": false
+   },
+   {
+    "station_id": "ba33c334-e17d-4478-ae3c-9c2f4dbfbb51",
+    "num_bikes_available": 0,
+    "num_bikes_disabled": 0,
+    "num_docks_available": 0,
+    "num_docks_disabled": 0,
+    "is_installed": 0,
+    "is_renting": 0,
+    "is_returning": 0,
+    "last_reported": 86400,
+    "legacy_id": "4826",
+    "num_ebikes_available": 0,
+    "eightd_has_available_keys": false
+   },
+   {
+    "station_id": "06439006-11b6-44f0-8545-c9d39035f32a",
+    "num_bikes_available": 0,
+    "num_bikes_disabled": 0,
+    "num_docks_available": 0,
+    "num_docks_disabled": 0,
+    "is_installed": 0,
+    "is_renting": 0,
+    "is_returning": 0,
+    "last_reported": 86400,
+    "legacy_id": "4648",
+    "num_ebikes_available": 0,
+    "eightd_has_available_keys": false
+   },
+   {
+    "station_id": "1986707977001495180",
+    "num_bikes_available": 0,
+    "num_bikes_disabled": 0,
+    "num_docks_available": 0,
+    "num_docks_disabled": 0,
+    "is_installed": 0,
+    "is_renting": 0,
+    "is_returning": 0,
+    "last_reported": 86400,
+    "legacy_id": "1986707977001495180",
+    "num_ebikes_available": 0,
+    "eightd_has_available_keys": false
+   }
+  ]
+ },
+ "last_updated": 1792415477,
+ "ttl": 60,
+ "version": "1.1"
+}
