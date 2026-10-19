@@ -22,4 +22,10 @@ Past trips, weather and holidays (Step 2) are downloaded on GitHub, not locally:
 gh workflow run backfill.yml
 ```
 
+Plan van moves for a real zone and time (Step 5), also on GitHub:
+
+```bash
+gh workflow run plan.yml -f start=08:00 -f vans=3
+```
+
 Parquet lands in `data/lake/<table>/date=YYYY-MM-DD/hour=HH/`.

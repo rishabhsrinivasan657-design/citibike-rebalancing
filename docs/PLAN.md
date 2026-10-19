@@ -34,7 +34,7 @@ A ✅ means the check has passed. A ⬜ means it hasn't been done yet.
 
 Create the folder, the tools, and these planning documents.
 
-- ✅ The automatic checks run and pass (49 tests).
+- ✅ The automatic checks run and pass (81 tests).
 
 ---
 
@@ -149,7 +149,7 @@ results are honest.
 ---
 
 ## Step 5: Plan the van moves
-**Status: in progress**
+**Status: done (Oct 19, 2026), with known limits below**
 
 **What it does:** given how many bikes each station has now and how busy it's
 expected to be, works out the best moves for a few vans. For each move: which
@@ -161,9 +161,13 @@ station to take bikes from, where to drop them, how many, and by when. For examp
    to move between which stations, to avoid as many "no bikes" and "no parking"
    problems as possible. Stations about to run out sooner count more. Driving
    time counts against a move.
-2. **Put them in order.** Each van gets a list of trips, in order. The planner
-   checks every arrival time; a trip that can't arrive in time is dropped and
-   reported, never shown as if it were possible.
+2. **Put them in order.** Each van gets a list of trips, in order, most urgent
+   first. A trip that can't finish within the shift is dropped and reported.
+   A separate checker then re-checks every limit, so an impossible move is never shown.
+
+A delivery that arrives after a station has run empty still counts, but only for
+the riders who come after the bikes arrive. (The first version wrongly treated
+late deliveries as useless; the tests caught it.)
 
 **Real limits it respects:**
 - Each van carries at most 25 bikes.
@@ -181,14 +185,23 @@ they'll replace these averages.
 on a weekday.
 
 **Checks**
-- ⬜ It never breaks a limit: van over-filled, station over-filled or emptied
-  below zero, or a van arriving after the deadline (tested on hand-built cases).
-- ⬜ When moving bikes can't help, it suggests no moves.
-- ⬜ It finds a plan for a busy 8am Midtown morning in under 30 seconds.
-- ⬜ On that morning, the plan reduces the expected "no bikes / no parking"
-  problems compared with doing nothing.
+- ✅ It never breaks a limit: van over-filled, station over-filled or emptied
+  below zero, or a van finishing after the shift. Tested on 12 hand-built cases
+  and 15 random ones, and re-checked automatically on every plan.
+- ✅ When moving bikes can't help, it suggests no moves.
+- ✅ It plans a busy 8am Midtown weekday in **0.5 seconds** (target: under 30):
+  121 stations, 3 vans.
+- ✅ On that morning, the plan cuts riders who'd find no bike or no dock from
+  **75 to 44 (41% fewer)**: no bike 36 → 16, no dock 39 → 28, moving 41 bikes in 6 trips.
 
----
+**Known limits (to fix in later steps)**
+- The bike counts were whatever the live feed showed when it ran (Monday evening),
+  paired with typical 8am demand. Once the recorder has a real weekday morning,
+  we'll use the 7:45am counts instead.
+- Expected riders are 12-month averages, not predictions. Step 4 replaces them.
+- The vans are under-used (41 bikes in an hour) and "no dock" improves less than
+  "no bike". Full stations can only send bikes to the 10 roomiest stations, which
+  is a simplification worth revisiting.
 
 ## Step 6: Test the plan on past days
 **Status: not started**
