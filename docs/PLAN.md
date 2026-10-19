@@ -34,12 +34,12 @@ A ✅ means the check has passed. A ⬜ means it hasn't been done yet.
 
 Create the folder, the tools, and these planning documents.
 
-- ✅ The automatic checks run and pass (23 tests).
+- ✅ The automatic checks run and pass (27 tests).
 
 ---
 
 ## Step 1: Record live station data
-**Status: almost done. The free 24/7 version is built and tested; it just needs switching on.**
+**Status: almost done. Recording 24/7 on GitHub since Oct 19, 2026; waiting on the 24-hour check.**
 
 **What it does:** every minute, a program asks Citi Bike "how many bikes and empty
 docks does each station have?" and saves the answer. Once an hour it also saves
@@ -57,7 +57,7 @@ ourselves. Every day we're not recording is data we can never get back.
 - ✅ A version that runs free on GitHub was built and tested on the real data for
      3 minutes (every check succeeded, every row was saved, it stopped on time).
 - ✅ If uploading fails, the files are kept and sent again later (tested).
-- ⬜ Switched on: GitHub + Hugging Face accounts connected (see `SETUP_CLOUD.md`).
+- ✅ Switched on: a test run on GitHub uploaded to Hugging Face (Oct 19, 2026).
 
 **Problems found while testing (both fixed)**
 1. The saving part sometimes started before it was ready to read data, got
