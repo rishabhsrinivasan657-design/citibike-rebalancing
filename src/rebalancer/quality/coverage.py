@@ -20,6 +20,7 @@ from pathlib import Path
 import pyarrow.dataset as ds
 
 TARGET = 0.98
+FULL_WINDOW_MINUTES = 23.5 * 60  # judge the target only on (almost) a full day
 
 
 @dataclass
@@ -38,6 +39,10 @@ class Coverage:
     @property
     def passed(self) -> bool:
         return self.ratio >= TARGET
+
+    @property
+    def full_window(self) -> bool:
+        return self.expected_minutes >= FULL_WINDOW_MINUTES
 
 
 def compute(
@@ -72,7 +77,10 @@ def compute(
 
 
 def render(c: Coverage) -> str:
-    verdict = "PASS ✅" if c.passed else "NOT YET ❌"
+    if not c.full_window:
+        verdict = "TOO EARLY TO JUDGE ⏳"
+    else:
+        verdict = "PASS ✅" if c.passed else "BELOW TARGET ❌"
     hours = c.expected_minutes / 60
     lines = [
         f"## Recording coverage: {verdict}",
@@ -145,7 +153,7 @@ def main() -> None:
     if summary := os.environ.get("GITHUB_STEP_SUMMARY"):
         with open(summary, "a") as f:
             f.write(report + "\n")
-    if not coverage.passed:
+    if coverage.full_window and not coverage.passed:
         sys.exit(1)  # a failed scheduled run makes GitHub email the repo owner
 
 

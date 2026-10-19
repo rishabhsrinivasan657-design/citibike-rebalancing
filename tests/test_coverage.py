@@ -36,7 +36,14 @@ def test_window_is_last_24_hours():
 
 
 def test_short_window_says_so():
-    assert "only 1.0 h recorded" in render(compute(_minutes(60), 0))
+    report = render(compute(_minutes(60), 0))
+    assert "only 1.0 h recorded" in report and "TOO EARLY" in report
+
+
+def test_full_day_below_target_is_flagged():
+    c = compute(_minutes(24 * 60, skip=set(range(100, 160))), 0)
+    assert c.full_window and not c.passed
+    assert "BELOW TARGET" in render(c)
 
 
 def test_no_polls_is_an_error():
