@@ -29,6 +29,32 @@ class Uploader(Protocol):
     def upload(self, files: list[Path], root: Path) -> None: ...
 
 
+def resolve_repo_id(api: Any, repo_id: str, need_write: bool) -> str:
+    """Return `namespace/name`, filling in the token owner's username if missing.
+
+    Exits with a plain-language message for the common setup mistakes.
+    """
+    who = api.whoami()
+    username = who["name"]
+    role = who.get("auth", {}).get("accessToken", {}).get("role")
+    if need_write and role == "read":
+        raise SystemExit(
+            f"The Hugging Face token for '{username}' is read-only. "
+            "Create a token with type 'Write' and update the HF_TOKEN secret."
+        )
+    if "/" not in repo_id:
+        repo_id = f"{username}/{repo_id}"
+    namespace = repo_id.split("/", 1)[0]
+    orgs = {o.get("name") for o in who.get("orgs", [])}
+    if namespace not in {username, *orgs}:
+        raise SystemExit(
+            f"HF_REPO is '{repo_id}', but the token belongs to '{username}'. "
+            f"Set HF_REPO to '{username}/{repo_id.split('/', 1)[1]}' "
+            "or just the dataset name."
+        )
+    return repo_id
+
+
 class HuggingFaceUploader:
     """Uploads lake files to `<repo>/lake/...`, keeping the local partition layout.
 
@@ -43,24 +69,7 @@ class HuggingFaceUploader:
             api = HfApi(token=token)
         self.api = api
 
-        who = api.whoami()
-        username = who["name"]
-        role = who.get("auth", {}).get("accessToken", {}).get("role")
-        if role == "read":
-            raise SystemExit(
-                f"The Hugging Face token for '{username}' is read-only. "
-                "Create a token with type 'Write' and update the HF_TOKEN secret."
-            )
-        if "/" not in repo_id:
-            repo_id = f"{username}/{repo_id}"
-        namespace = repo_id.split("/", 1)[0]
-        orgs = {o.get("name") for o in who.get("orgs", [])}
-        if namespace not in {username, *orgs}:
-            raise SystemExit(
-                f"HF_REPO is '{repo_id}', but the token belongs to '{username}'. "
-                f"Set HF_REPO to '{username}/{repo_id.split('/', 1)[1]}' "
-                "or just the dataset name."
-            )
+        repo_id = resolve_repo_id(api, repo_id, need_write=True)
         self.repo_id = repo_id
         self.api.create_repo(repo_id, repo_type="dataset", private=True, exist_ok=True)
         log.info("uploading to Hugging Face dataset %s", repo_id)

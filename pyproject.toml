@@ -24,6 +24,7 @@ dev = [
 collector = "rebalancer.ingest.collector:main"
 lake-sink = "rebalancer.ingest.sink:main"
 recorder = "rebalancer.ingest.recorder:main"
+coverage-report = "rebalancer.quality.coverage:main"
 
 [build-system]
 requires = ["hatchling"]

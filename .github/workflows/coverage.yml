@@ -1,0 +1,25 @@
+# Daily check that the recorder caught >= 98% of minutes in the last 24 hours.
+# A failing run makes GitHub email you. Run it by hand with:
+#   gh workflow run coverage.yml
+name: coverage
+
+on:
+  schedule:
+    - cron: "40 13 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  report:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+      - uses: astral-sh/setup-uv@v6
+      - run: uv sync --frozen --no-dev
+      - run: uv run coverage-report
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+          HF_REPO: ${{ vars.HF_REPO }}
