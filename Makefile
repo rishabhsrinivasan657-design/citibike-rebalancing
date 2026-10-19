@@ -28,3 +28,4 @@ down:
 
 logs:
 	docker compose logs -f collector lake-sink
+

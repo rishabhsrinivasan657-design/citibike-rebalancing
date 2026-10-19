@@ -113,3 +113,26 @@ GitHub Actions (new run every 2 h, each lasts 2 h 45 m)
 | Failed uploads | Files stay on disk and are retried at the next upload; if the run ends with files still pending, the workflow saves them as a GitHub artifact (kept 7 days) so they can be recovered by hand. |
 | Public GitHub repo | Actions minutes are unlimited only for public repos (~2,000 min/day are needed). No secrets live in the code. |
 | Keep-alive | GitHub pauses scheduled workflows after 60 days with no repo activity; each run re-enables its own workflow through the API. |
+
+## Historical data (Step 2)
+
+```
+s3://tripdata/YYYYMM-citibike-tripdata.zip ──► download ──► unzip (every *.csv inside)
+                                                   ──► DuckDB (typed read) ──► data/raw/trips/month=YYYY-MM/trips.parquet
+                                                                                + _manifest.json
+Open-Meteo archive + historical-forecast ──► data/raw/weather/{observed,forecast}.parquet
+holidays package (US, NY) ──► data/raw/holidays/holidays.parquet
+```
+
+| Choice | Why |
+|---|---|
+| Raw layer copies the source faithfully | Times stay naive New York local time as published; time-zone handling happens once, in Step 3 (dbt), where it can be tested. |
+| All station IDs and ride IDs read as `VARCHAR` | `7293.10` must not become `7293.1`. |
+| DuckDB for CSV → Parquet | Reads multi-GB CSVs quickly with explicit types; we'll use it for dbt in Step 3 anyway. |
+| One manifest per month | Records source URL, ETag, size, CSV row count and Parquet row count. A month is skipped on re-run only if the manifest exists and the source ETag is unchanged. |
+| Zip deleted after conversion | Keeps disk use to ~2 GB for 12 months instead of ~11 GB. |
+| Runs on GitHub Actions, stored on Hugging Face (`citibike-history`) | A laptop run hit macOS's out-of-memory warning (2026-10-19). The workflow pulls what's already in the dataset, skips finished months, and pushes each month as soon as it's converted. |
+| DuckDB memory capped (`backfill/db.py`) | DuckDB defaults to 80% of RAM. Capped at 1 GB / 2 threads by default; the workflow raises it to 8 GB on GitHub's 16 GB machines. |
+| Window: Oct 2025 – Sep 2026 | The latest 12 published months (Citi Bike publishes with ~2–3 weeks' lag). |
+| Weather point: Central Park (40.7829, −73.9654) | Single point is enough for a city-wide signal. Both the ERA5-based archive (what happened) and the historical forecast archive (what was predicted) are stored to avoid training on information we won't have live. Open-Meteo is free for non-commercial use. |
+| Station match uses the live `station_information.short_name` | Trip files use `short_name`-style IDs. Stations removed during the year won't match, so the target is 97%, not 100%. |

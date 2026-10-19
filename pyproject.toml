@@ -6,6 +6,8 @@ readme = "README.md"
 requires-python = ">=3.12,<3.13"
 dependencies = [
     "confluent-kafka>=2.6",
+    "duckdb>=1.1",
+    "holidays>=0.60",
     "httpx>=0.27",
     "huggingface-hub>=0.25",
     "pyarrow>=17",
@@ -25,6 +27,7 @@ collector = "rebalancer.ingest.collector:main"
 lake-sink = "rebalancer.ingest.sink:main"
 recorder = "rebalancer.ingest.recorder:main"
 coverage-report = "rebalancer.quality.coverage:main"
+backfill = "rebalancer.backfill.cli:main"
 
 [build-system]
 requires = ["hatchling"]

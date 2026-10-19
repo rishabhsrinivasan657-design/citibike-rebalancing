@@ -69,20 +69,44 @@ ourselves. Every day we're not recording is data we can never get back.
 ---
 
 ## Step 2: Download past data
-**Status: not started**
+**Status: in progress**
 
-**What it does:** downloads the information the predictions will learn from:
-- **Past trips:** every Citi Bike ride from the last 12 months (where and when it
-  started and ended). Citi Bike publishes these for free.
-- **Weather:** hourly temperature and rain. Fewer people ride in the rain.
-- **Holidays:** riding patterns change completely on holidays.
+**What it does:** downloads the information the predictions will learn from, for
+**October 2025 to September 2026** (the 12 most recent months Citi Bike has published):
+- **Past trips:** every Citi Bike ride: where and when it started and ended.
+  About 45 million rides, 8.6 GB to download.
+- **Weather:** hourly temperature, rain, snow and wind in Central Park. Two versions:
+  - what the weather **actually was**, and
+  - what the **forecast said** at the time. When predicting live, we'll only know
+    the forecast, so the model should learn from forecasts too.
+- **Holidays:** US and New York holidays.
+
+**Where it runs:** on GitHub's free computers, not your laptop. (The first try ran
+on the laptop and used so much memory that macOS showed an "out of memory" warning.
+The data was deleted, and the heavy work moved to GitHub.)
+
+**Where it goes:** a private Hugging Face dataset called `citibike-history`, as
+compact Parquet files (about 4× smaller than the originals). It's re-runnable at
+any time: months already saved are skipped unless Citi Bike changes the file.
+
+**Things to watch out for (found while looking at the files)**
+- Station IDs look like numbers (`7293.10`) but must be kept as text, or
+  `7293.10` turns into `7293.1` and stops matching.
+- File names inside each month's zip change from month to month.
+- Times are New York local time, with no time zone written down.
+- A ride that starts just before midnight at the end of a month is listed in *both*
+  months' files (512 rides). That's Citi Bike's doing; Step 3 removes the extra copy.
+- A few real station IDs have only one decimal (e.g. `6131.1` is E 24 St & Park
+  Ave S), so "one decimal" doesn't mean an ID was damaged.
 
 **Checks**
-- ⬜ At least 97% of trips can be matched to a real station.
-- ⬜ The number of trips per month matches Citi Bike's files.
-- ⬜ No missing weather hours.
-
----
+- ⬜ For every month, the number of trips we saved equals the number of rows in
+  Citi Bike's files (nothing lost or duplicated).
+- ⬜ No trip appears twice within the same month.
+- ⬜ At least 97% of trips start at a station that matches a station in the live feed.
+- ⬜ Station IDs are stored as text, so `7293.10` can't become `7293.1`.
+- ⬜ Weather has every hour, with no gaps.
+- ⬜ Holidays include the obvious ones (New Year's Day, July 4th, Thanksgiving).
 
 ## Step 3: Organise the data into clean tables
 **Status: not started**

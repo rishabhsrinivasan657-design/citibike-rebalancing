@@ -1,0 +1,36 @@
+# Step 2: download past trips, weather and holidays, check them, and store them in
+# the Hugging Face dataset HF_HISTORY_REPO (default: <you>/citibike-history).
+# Runs on GitHub's machines so nothing heavy runs on a laptop. Start it with:
+#   gh workflow run backfill.yml
+# Months already in the dataset are skipped, so re-running is cheap.
+name: backfill
+
+on:
+  workflow_dispatch:
+    inputs:
+      start:
+        description: "First month (YYYY-MM)"
+        default: "2025-10"
+      end:
+        description: "Last month (YYYY-MM)"
+        default: "2026-09"
+
+permissions:
+  contents: read
+
+jobs:
+  backfill:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v5
+      - uses: astral-sh/setup-uv@v6
+      - run: uv sync --frozen --no-dev
+      - name: Backfill and check
+        run: uv run backfill all --hf --raw ./work/raw --start "${{ inputs.start }}" --end "${{ inputs.end }}"
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+          HF_HISTORY_REPO: ${{ vars.HF_HISTORY_REPO || 'citibike-history' }}
+          # GitHub's machines have 16 GB of RAM; leave headroom for the OS.
+          DUCKDB_MEMORY_LIMIT: 8GB
+          DUCKDB_THREADS: "4"

@@ -16,4 +16,10 @@ make up          # Redpanda + collector + lake sink (Docker)
 make logs        # follow collector and sink logs
 ```
 
+Past trips, weather and holidays (Step 2) are downloaded on GitHub, not locally:
+
+```bash
+gh workflow run backfill.yml
+```
+
 Parquet lands in `data/lake/<table>/date=YYYY-MM-DD/hour=HH/`.
