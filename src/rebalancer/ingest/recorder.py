@@ -30,7 +30,11 @@ class Uploader(Protocol):
 
 
 class HuggingFaceUploader:
-    """Uploads lake files to `<repo>/lake/...`, keeping the local partition layout."""
+    """Uploads lake files to `<repo>/lake/...`, keeping the local partition layout.
+
+    `repo_id` may be a bare dataset name; the token owner's username is then used
+    as the namespace, so nobody has to type their username exactly right.
+    """
 
     def __init__(self, repo_id: str, token: str, api: Any = None) -> None:
         if api is None:
@@ -38,8 +42,28 @@ class HuggingFaceUploader:
 
             api = HfApi(token=token)
         self.api = api
+
+        who = api.whoami()
+        username = who["name"]
+        role = who.get("auth", {}).get("accessToken", {}).get("role")
+        if role == "read":
+            raise SystemExit(
+                f"The Hugging Face token for '{username}' is read-only. "
+                "Create a token with type 'Write' and update the HF_TOKEN secret."
+            )
+        if "/" not in repo_id:
+            repo_id = f"{username}/{repo_id}"
+        namespace = repo_id.split("/", 1)[0]
+        orgs = {o.get("name") for o in who.get("orgs", [])}
+        if namespace not in {username, *orgs}:
+            raise SystemExit(
+                f"HF_REPO is '{repo_id}', but the token belongs to '{username}'. "
+                f"Set HF_REPO to '{username}/{repo_id.split('/', 1)[1]}' "
+                "or just the dataset name."
+            )
         self.repo_id = repo_id
         self.api.create_repo(repo_id, repo_type="dataset", private=True, exist_ok=True)
+        log.info("uploading to Hugging Face dataset %s", repo_id)
 
     def upload(self, files: list[Path], root: Path) -> None:
         from huggingface_hub import CommitOperationAdd

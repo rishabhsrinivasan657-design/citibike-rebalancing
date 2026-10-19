@@ -103,22 +103,59 @@ def test_run_retries_discovery_then_stops_at_deadline(tmp_path):
     assert c.feeds == {}
 
 
+class FakeApi:
+    def __init__(self, name="alice", role="write", orgs=()):
+        self.who = {
+            "name": name,
+            "auth": {"accessToken": {"role": role}},
+            "orgs": [{"name": o} for o in orgs],
+        }
+        self.created = None
+
+    def whoami(self):
+        return self.who
+
+    def create_repo(self, repo_id, **kw):
+        self.created = (repo_id, kw)
+
+    def create_commit(self, **kw):
+        self.commit = kw
+
+
 def test_hf_uploader_maps_paths(tmp_path):
-    class FakeApi:
-        def create_repo(self, *a, **kw):
-            self.created = kw
-
-        def create_commit(self, **kw):
-            self.commit = kw
-
     f = tmp_path / "poll_log" / "date=2026-10-19" / "hour=13" / "part-1.parquet"
     f.parent.mkdir(parents=True)
     f.write_bytes(b"x")
     api = FakeApi()
-    HuggingFaceUploader("me/citibike", "tok", api=api).upload([f], tmp_path)
-    assert api.created["private"] is True
+    HuggingFaceUploader("alice/citibike", "tok", api=api).upload([f], tmp_path)
+    assert api.created == (
+        "alice/citibike",
+        {"repo_type": "dataset", "private": True, "exist_ok": True},
+    )
     (op,) = api.commit["operations"]
     assert op.path_in_repo == "lake/poll_log/date=2026-10-19/hour=13/part-1.parquet"
+
+
+def test_bare_dataset_name_uses_token_owner():
+    api = FakeApi(name="alice")
+    assert HuggingFaceUploader("citibike-station-status", "tok", api=api).repo_id == (
+        "alice/citibike-station-status"
+    )
+
+
+def test_org_namespace_is_allowed():
+    api = FakeApi(name="alice", orgs=["nyc-lab"])
+    assert HuggingFaceUploader("nyc-lab/ds", "tok", api=api).repo_id == "nyc-lab/ds"
+
+
+def test_wrong_username_gives_clear_error():
+    with pytest.raises(SystemExit, match="token belongs to 'alice'"):
+        HuggingFaceUploader("RokuRocksE/citibike", "tok", api=FakeApi(name="alice"))
+
+
+def test_read_only_token_gives_clear_error():
+    with pytest.raises(SystemExit, match="read-only"):
+        HuggingFaceUploader("ds", "tok", api=FakeApi(role="read"))
 
 
 @pytest.fixture(autouse=True)

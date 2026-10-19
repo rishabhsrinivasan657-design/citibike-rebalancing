@@ -15,7 +15,6 @@ where these steps say to.
    - **Token type:** choose **Write**.
    - **Name:** `citibike-recorder`.
 4. Click **Create token** and copy it. You'll paste it in step 3.
-5. Note your Hugging Face **username**. You'll need it in step 3.
 
 ## 2. Put the project on GitHub
 
@@ -34,10 +33,10 @@ gh secret set HF_TOKEN
 
 It asks you to paste the token. Paste it and press Enter. The text stays hidden.
 
-Then run this, with `YOUR-HF-USERNAME` replaced by your Hugging Face username:
+Then run this to name the dataset. The recorder works out your username from the token:
 
 ```bash
-gh variable set HF_REPO --body "YOUR-HF-USERNAME/citibike-station-status"
+gh variable set HF_REPO --body "citibike-station-status"
 ```
 
 ## 4. Start it
@@ -70,7 +69,10 @@ make down
 
 - **The run shows a red ✗:** click it to see the error.
   - "HF_REPO and HF_TOKEN must be set" means step 3 was missed.
-  - A 401 or 403 error means the token is wrong or isn't a **Write** token.
+  - "read-only" means the token isn't a **Write** token. Make a new one.
+  - "token belongs to ..." means HF_REPO names a different account. Set it to just
+    `citibike-station-status`.
+  - A 401 error means the token was copied wrongly. Run `gh secret set HF_TOKEN` again.
 - **Files failed to upload:** they're saved on the run's page under **Artifacts**
   for 7 days.
 - **Runs stopped starting by themselves:** go to **Actions** → **record** → **Enable workflow**.
