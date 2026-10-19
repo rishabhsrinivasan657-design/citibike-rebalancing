@@ -10,6 +10,7 @@ dependencies = [
     "holidays>=0.60",
     "httpx>=0.27",
     "huggingface-hub>=0.25",
+    "pulp>=2.9,<3",
     "pyarrow>=17",
     "pydantic>=2.8",
     "pydantic-settings>=2.4",
@@ -28,6 +29,7 @@ lake-sink = "rebalancer.ingest.sink:main"
 recorder = "rebalancer.ingest.recorder:main"
 coverage-report = "rebalancer.quality.coverage:main"
 backfill = "rebalancer.backfill.cli:main"
+plan-moves = "rebalancer.planner.run:main"
 
 [build-system]
 requires = ["hatchling"]

@@ -149,16 +149,44 @@ results are honest.
 ---
 
 ## Step 5: Plan the van moves
-**Status: not started**
+**Status: in progress**
 
-**What it does:** given the predictions, works out the best moves for a few vans:
-which station to take bikes from, where to drop them, how many, and by when. It
-respects real limits: each van holds about 20–30 bikes, stations have a fixed
-number of docks, and driving takes time. We start with one area (Midtown).
+**What it does:** given how many bikes each station has now and how busy it's
+expected to be, works out the best moves for a few vans. For each move: which
+station to take bikes from, where to drop them, how many, and by when. For example:
+"Van 1: take 12 bikes from W 52 St & 6 Ave to Grand Central, arrive by 8:12."
+
+**How it decides (in two stages):**
+1. **Choose the moves.** A maths model (integer programming) picks how many bikes
+   to move between which stations, to avoid as many "no bikes" and "no parking"
+   problems as possible. Stations about to run out sooner count more. Driving
+   time counts against a move.
+2. **Put them in order.** Each van gets a list of trips, in order. The planner
+   checks every arrival time; a trip that can't arrive in time is dropped and
+   reported, never shown as if it were possible.
+
+**Real limits it respects:**
+- Each van carries at most 25 bikes.
+- You can't take more bikes than a station has, or drop more than it has free docks.
+- Driving takes time: about 12 km/h in Midtown traffic, plus time to park and
+  load (Manhattan's street grid is used to measure distance, not straight lines).
+- The vans' shift has a fixed length (60 minutes by default).
+
+**Where the expected busyness comes from:** the past year of trips (Step 2),
+averaged per station, per hour, for weekdays and weekends separately. This is
+computed on GitHub, not your laptop. When the predictions from Step 4 exist,
+they'll replace these averages.
+
+**Where it starts:** one area, Midtown (about 1.5 km around Bryant Park), at 8am
+on a weekday.
 
 **Checks**
-- ⬜ It never breaks a limit (over-filling a van or a station, or arriving late).
+- ⬜ It never breaks a limit: van over-filled, station over-filled or emptied
+  below zero, or a van arriving after the deadline (tested on hand-built cases).
+- ⬜ When moving bikes can't help, it suggests no moves.
 - ⬜ It finds a plan for a busy 8am Midtown morning in under 30 seconds.
+- ⬜ On that morning, the plan reduces the expected "no bikes / no parking"
+  problems compared with doing nothing.
 
 ---
 

@@ -167,6 +167,33 @@ def holiday_checks(raw: Path, years: list[int]) -> list[Check]:
     ]
 
 
+def profile_checks(raw: Path) -> list[Check]:
+    """The profile's departures, times the days they average over, must add back up
+    to the number of (de-duplicated) trips with a start station."""
+    path = raw / "profiles" / "station_hour.parquet"
+    name = "Station-hour profile adds up to the trips"
+    if not path.exists():
+        return [Check(name, False, "file missing")]
+    glob = (raw / "trips").as_posix() + "/month=*/trips.parquet"
+    con = db.connect()
+    from_profile = con.execute(
+        f"SELECT sum(departures * days) FROM read_parquet('{path.as_posix()}')"
+    ).fetchone()[0]
+    actual = con.execute(
+        f"""SELECT count(DISTINCT ride_id) FROM read_parquet('{glob}')
+            WHERE start_station_id IS NOT NULL"""
+    ).fetchone()[0]
+    con.close()
+    diff = abs(from_profile - actual) / actual if actual else 1.0
+    return [
+        Check(
+            name,
+            diff < 0.001,
+            f"{from_profile:,.0f} departures in the profile vs {actual:,} trips ({diff:.3%} apart)",
+        )
+    ]
+
+
 def render(checks: list[Check]) -> str:
     lines = ["| Check | Result | Detail |", "|---|---|---|"]
     lines += [f"| {c.name} | {'✅' if c.passed else '❌'} | {c.detail} |" for c in checks]

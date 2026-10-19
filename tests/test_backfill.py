@@ -5,6 +5,7 @@ from datetime import UTC, datetime
 import duckdb
 import httpx
 import pyarrow.parquet as pq
+import pytest
 import respx
 
 from rebalancer.backfill import checks, holidays_calendar, trips, weather
@@ -230,3 +231,31 @@ def test_cmd_trips_pushes_each_month(tmp_path):
     cli.cmd_trips(tmp_path, "2026-04", "2026-04", force=False, push=pushed.append)
     cli.cmd_trips(tmp_path, "2026-04", "2026-04", force=False, push=pushed.append)  # skipped
     assert pushed == [trips.month_dir(tmp_path, "2026-04")]
+
+
+@respx.mock
+def test_profiles_average_over_all_days_and_add_up(tmp_path):
+    from rebalancer.backfill import profiles
+
+    rows = [
+        _row("A", started="2026-04-06 08:10:00.000"),  # Monday
+        _row("B", started="2026-04-06 08:40:00.000"),
+        _row("C", started="2026-04-11 08:05:00.000"),  # Saturday
+    ]
+    src = trips.SourceFile("a.zip", trips.BUCKET_URL + "a.zip", "e", 1)
+    respx.get(src.url).mock(return_value=httpx.Response(200, content=_zip_bytes(rows, [])))
+    with httpx.Client() as c:
+        trips.backfill_month(c, tmp_path, "2026-04", src)
+    holidays_calendar.backfill(tmp_path, [2026])
+
+    assert profiles.build(tmp_path, "2026-04", "2026-04") > 0
+    table = pq.read_table(tmp_path / "profiles" / "station_hour.parquet").to_pylist()
+    wk = next(
+        r
+        for r in table
+        if r["station_id"] == "7293.10" and r["day_type"] == "weekday" and r["hour"] == 8
+    )
+    assert wk["days"] == 22  # April 2026 has 22 weekdays and no NY holidays
+    assert wk["departures"] == pytest.approx(2 / 22)
+    (check,) = checks.profile_checks(tmp_path)
+    assert check.passed, check.detail

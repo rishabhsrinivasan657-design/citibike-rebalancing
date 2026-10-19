@@ -1,0 +1,39 @@
+# Step 5: plan van moves for a real zone and time, using live bike counts and the
+# station-hour profile from the history dataset. The move list appears on the run's
+# summary page. Start it with:
+#   gh workflow run plan.yml -f start=08:00 -f vans=3
+name: plan
+
+on:
+  workflow_dispatch:
+    inputs:
+      zone:
+        description: "Zone"
+        default: "midtown"
+      start:
+        description: "Start time (HH:MM, New York time)"
+        default: "08:00"
+      day_type:
+        description: "weekday or weekend"
+        default: "weekday"
+      vans:
+        description: "Number of vans"
+        default: "3"
+
+permissions:
+  contents: read
+
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+      - uses: astral-sh/setup-uv@v6
+      - run: uv sync --frozen --no-dev
+      - run: >-
+          uv run plan-moves --zone "${{ inputs.zone }}" --start "${{ inputs.start }}"
+          --day-type "${{ inputs.day_type }}" --vans "${{ inputs.vans }}"
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+          HF_HISTORY_REPO: ${{ vars.HF_HISTORY_REPO || 'citibike-history' }}

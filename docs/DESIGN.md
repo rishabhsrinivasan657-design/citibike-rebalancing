@@ -136,3 +136,62 @@ holidays package (US, NY) ──► data/raw/holidays/holidays.parquet
 | Window: Oct 2025 – Sep 2026 | The latest 12 published months (Citi Bike publishes with ~2–3 weeks' lag). |
 | Weather point: Central Park (40.7829, −73.9654) | Single point is enough for a city-wide signal. Both the ERA5-based archive (what happened) and the historical forecast archive (what was predicted) are stored to avoid training on information we won't have live. Open-Meteo is free for non-commercial use. |
 | Station match uses the live `station_information.short_name` | Trip files use `short_name`-style IDs. Stations removed during the year won't match, so the target is 97%, not 100%. |
+
+## Move planner (Step 5)
+
+Two stages: an integer program chooses *what* to move; a scheduler decides *who
+does it when* and drops anything that can't arrive in time. An independent checker
+re-verifies every limit on the final plan, so an impossible move is never shown.
+
+### Inputs (`planner/model.py`)
+For each station *i* in the zone, over a horizon of *H* minutes (default 60):
+`b_i` bikes now, `D_i` free docks now (so usable capacity `C_i = b_i + D_i`), and
+expected departures `dep_i` and arrivals `arr_i` from the station-hour profile.
+Projected end inventory with no moves: `e_i = b_i + arr_i − dep_i`.
+
+Vans: `K` vans (default 3), capacity `Q = 25`, shift `T = H`, starting at the zone centre.
+
+Urgency: the minute station *i* is expected to run empty, `b_i / net_out_rate`, or
+full, `D_i / net_in_rate`. Weight `w_i = clip(H / minutes_until_problem, 1, 6)`.
+
+### Stage 1: choose the moves (MIP, PuLP + CBC)
+Variables per allowed pair (donor *i* → receiver *j*): bikes `x_ij ∈ ℤ≥0`, trips `z_ij ∈ ℤ≥0`.
+
+```
+min   Σ_i w_i (short_i + over_i)  +  λ Σ_ij τ_ij z_ij
+s.t.  x_ij ≤ Q z_ij                                  van capacity per trip
+      Σ_j x_ij ≤ b_i                                 can't take bikes that aren't there
+      Σ_i x_ij ≤ D_j                                 can't drop more than free docks
+      short_i ≥ β − (e_i + in_i − out_i)             β = 2-bike safety buffer
+      over_i  ≥ (e_i + in_i − out_i) − (C_i − β)
+      Σ_ij z_ij (τ_ij + handling + deadhead) ≤ K·T   total van time
+```
+`λ = 0.01` per minute makes driving a tie-breaker: a move happens only if it
+reduces a problem. To keep the model small, receivers are the 25 most urgent
+stations projected short, donors the 25 with the most to spare (overflowing first);
+a pair is allowed only if a van could reach *j* via *i* from the depot before the
+receiver's deadline. `deadhead` (driving empty between trips) is approximated by
+half the median travel time in the zone; Stage 2 uses real times.
+
+### Stage 2: schedule (`planner/schedule.py`)
+Chosen moves are split into trips of ≤ Q bikes, ordered by receiver deadline
+(earliest first), and each trip goes to the van that can finish it soonest.
+Arrival = van free time + drive to *i* + load + drive to *j* + unload. A trip that
+would arrive after the shift ends or more than 10 minutes after the receiver's
+deadline is dropped and listed as dropped.
+
+### Travel time (`planner/geo.py`)
+Manhattan's avenues run ~29° east of north. Coordinates are converted to metres,
+rotated by 29° so streets and avenues align with the axes, and distance is the L1
+("city block") distance. Minutes = 2 (park) + metres / 200 (≈ 12 km/h). Loading or
+unloading takes 2 minutes + 0.25 minutes per bike.
+
+### Demand profile (`backfill profiles`, runs on GitHub)
+From the 12 months of trips: per station, per day type (weekday; weekend/holiday),
+per local hour, the average number of departures and arrivals per day, counting
+days with zero trips. Month-end duplicate rides are removed first. Stored as
+`raw/profiles/station_hour.parquet` in the history dataset (~100k rows).
+
+### Score
+"Problem bikes" = Σ (short + over) using the moves actually scheduled, compared
+with doing nothing. Weighted by urgency for the objective, reported unweighted.

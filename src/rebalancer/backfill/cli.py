@@ -4,6 +4,7 @@ backfill all                               # trips + weather + holidays, then ch
 backfill trips --start 2025-10 --end 2026-09
 backfill weather --start 2025-10-01 --end 2026-10-18
 backfill holidays
+backfill profiles                          # station-hour demand profile (needs trips + holidays)
 backfill check
 backfill all --hf    # pull/push data to the Hugging Face dataset in HF_HISTORY_REPO
                      # (used by the GitHub workflow, so nothing heavy runs on a laptop)
@@ -21,7 +22,7 @@ from pathlib import Path
 
 import httpx
 
-from rebalancer.backfill import checks, holidays_calendar, trips, weather
+from rebalancer.backfill import checks, holidays_calendar, profiles, trips, weather
 from rebalancer.config import Settings
 from rebalancer.ingest.gbfs import StationInformation, discover_feeds, fetch_json, parse_feed
 
@@ -75,6 +76,11 @@ def cmd_holidays(raw: Path, years: list[int], push: Push = _no_push) -> None:
     push(raw / "holidays")
 
 
+def cmd_profiles(raw: Path, start: str, end: str, push: Push = _no_push) -> None:
+    log.info("profiles: %d rows", profiles.build(raw, start, end))
+    push(raw / "profiles")
+
+
 def live_short_names() -> set[str]:
     s = Settings()
     with _client() as client:
@@ -91,6 +97,7 @@ def cmd_check(raw: Path, start: str, end: str, push: Push = _no_push) -> bool:
         checks.trip_checks(raw, trips.months_between(start, end), live_short_names())
         + checks.weather_checks(raw)
         + checks.holiday_checks(raw, _years(start, end))
+        + checks.profile_checks(raw)
     )
     report = (
         f"# Step 2 checks ({datetime.now(UTC):%Y-%m-%d %H:%M} UTC)\n\n{checks.render(results)}\n"
@@ -108,7 +115,9 @@ def main() -> None:
     parser = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawTextHelpFormatter
     )
-    parser.add_argument("command", choices=["all", "trips", "weather", "holidays", "check"])
+    parser.add_argument(
+        "command", choices=["all", "trips", "weather", "holidays", "profiles", "check"]
+    )
     parser.add_argument("--raw", type=Path, default=Path("data/raw"))
     parser.add_argument("--start", help="YYYY-MM for trips, YYYY-MM-DD for weather")
     parser.add_argument("--end", help="YYYY-MM for trips, YYYY-MM-DD for weather")
@@ -148,6 +157,8 @@ def main() -> None:
         cmd_weather(raw, weather_start, weather_end, push)
     if args.command in ("holidays", "all"):
         cmd_holidays(raw, _years(month_start, month_end), push)
+    if args.command in ("profiles", "all"):
+        cmd_profiles(raw, month_start, month_end, push)
     if args.command in ("check", "all") and not cmd_check(raw, month_start, month_end, push):
         sys.exit(1)
 
