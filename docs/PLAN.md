@@ -367,8 +367,13 @@ Step 4 instead of averages.
 ---
 
 ## Step 7: Finish and present
-**Status: not started**
+**Status: done (Oct 20, 2026), app deployment pending**
 
-- Send a Slack message when data stops arriving or a station is about to run out.
-- Write a clear README with a diagram, the results, and the limits of the project.
-- Record a short demo.
+- ✅ **Streamlit app**: live map of stations (empty / full / fine), the van plan as
+  arcs, a move list, and the model's test results. Tested with fake data and against
+  live data on GitHub (122 Midtown stations, planned in 0.3 s).
+- ✅ **Weekly verification**: `verify.yml` replays every fully recorded weekday
+  morning and commits [RESULTS.md](RESULTS.md).
+- ✅ **README** with a system diagram, results, what went wrong, and limits.
+- ⬜ App deployed on Streamlit Community Cloud (needs your sign-in).
+- Optional, not done: Slack alerts, Airflow DAG, Snowflake target, Terraform.
