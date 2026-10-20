@@ -219,6 +219,34 @@ def recorded_snapshot(
     return info, status
 
 
+def save_instance(inst: Instance, start: datetime, source: str, path: Path) -> None:
+    import dataclasses
+    import json
+
+    data = {
+        "label": inst.label,
+        "start": start.isoformat(),
+        "source": source,
+        "depot": list(inst.depot),
+        "params": dataclasses.asdict(inst.params),
+        "stations": [dataclasses.asdict(s) for s in inst.stations],
+    }
+    path.write_text(json.dumps(data, indent=1))
+
+
+def load_instance(path: Path) -> tuple[Instance, datetime, str]:
+    import json
+
+    data = json.loads(path.read_text())
+    inst = Instance(
+        [Station(**s) for s in data["stations"]],
+        tuple(data["depot"]),
+        Params(**data["params"]),
+        data["label"],
+    )
+    return inst, datetime.fromisoformat(data["start"]), data["source"]
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--zone", default="midtown", choices=sorted(ZONES))
@@ -234,10 +262,16 @@ def main() -> None:
     )
     parser.add_argument("--minute-table", type=Path, help="local fct_station_minute.parquet")
     parser.add_argument("--station-table", type=Path, help="local dim_station.parquet")
+    parser.add_argument("--save-instance", type=Path, help="write the planning problem as JSON")
+    parser.add_argument("--instance", type=Path, help="plan a saved problem instead")
     args = parser.parse_args()
     logging.basicConfig(level=logging.WARNING)
 
     params = Params(vans=args.vans, horizon_min=args.minutes)
+    if args.instance:
+        inst, start, source = load_instance(args.instance)
+        print(render(inst, plan(inst), start, source))
+        return
     if args.at:
         import holidays
 
@@ -270,6 +304,8 @@ def main() -> None:
     inst = build_instance(
         load_profile(args.profile), info_list, status_list, args.zone, start, day_type, params
     )
+    if args.save_instance:
+        save_instance(inst, start, source, args.save_instance)
     report = render(inst, plan(inst), start, source)
     print(report)
     if summary := os.environ.get("GITHUB_STEP_SUMMARY"):

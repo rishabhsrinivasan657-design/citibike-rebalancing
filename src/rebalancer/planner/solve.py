@@ -111,7 +111,9 @@ def choose_transfers(inst: Instance) -> tuple[list[Transfer], str]:
     cap = {pr: math.floor(useful(by_id[pr[0]], by_id[pr[1]])) for pr in pairs}
 
     m = pulp.LpProblem("rebalance", pulp.LpMinimize)
-    x = {pr: pulp.LpVariable(f"x_{n}", 0, cat="Integer") for n, pr in enumerate(pairs)}
+    # Bikes are continuous here and rounded down afterwards (rounding down can't break a
+    # limit); only trip counts must be whole numbers. Much faster to solve.
+    x = {pr: pulp.LpVariable(f"x_{n}", 0) for n, pr in enumerate(pairs)}
     z = {pr: pulp.LpVariable(f"z_{n}", 0, cat="Integer") for n, pr in enumerate(pairs)}
     involved = {i for pr in pairs for i in pr}
     short = {i: pulp.LpVariable(f"short_{k}", 0) for k, i in enumerate(involved)}
@@ -145,11 +147,15 @@ def choose_transfers(inst: Instance) -> tuple[list[Transfer], str]:
     # Accept a plan proven within 1% of the best possible; proving the last 1% can take
     # far longer and doesn't change the moves in a way that matters.
     m.solve(pulp.PULP_CBC_CMD(msg=False, timeLimit=p.solver_time_limit_s, gapRel=0.01))
-    status = pulp.LpStatus[m.status]  # always feasible: moving nothing is allowed
+    # PuLP reports "Optimal" even when CBC stops at the time limit, so use sol_status.
+    status = {
+        pulp.LpSolutionOptimal: "Optimal (within 1%)",
+        pulp.LpSolutionIntegerFeasible: "Best found before the time limit",
+    }.get(m.sol_status, pulp.LpStatus[m.status])
 
     out = []
     for pr in pairs:
-        bikes = round(x[pr].value() or 0)
+        bikes = math.floor((x[pr].value() or 0) + 1e-6)
         if bikes > 0:
             trips = max(1, math.ceil(bikes / p.van_capacity))
             out.append(Transfer(pr[0], pr[1], bikes, trips))

@@ -39,6 +39,12 @@ jobs:
           uv run plan-moves --zone "${{ inputs.zone }}" --start "${{ inputs.start }}"
           --day-type "${{ inputs.day_type }}" --vans "${{ inputs.vans }}"
           ${{ inputs.at && format('--at "{0}"', inputs.at) || '' }}
+          --save-instance instance.json
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
           HF_HISTORY_REPO: ${{ vars.HF_HISTORY_REPO || 'citibike-history' }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: planning-problem
+          path: instance.json
+          retention-days: 30

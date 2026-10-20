@@ -273,3 +273,16 @@ def test_recorded_snapshot_reads_the_right_minute_and_station_version(tmp_path):
     )
     assert {s.station_id: s.num_bikes_available for s in status} == {"a": 7, "b": 3}
     assert {i.station_id: i.name for i in info} == {"a": "A new", "b": "B"}
+
+
+def test_saved_instance_round_trips(tmp_path):
+    from datetime import datetime
+
+    from rebalancer.planner.run import load_instance, save_instance
+
+    inst = Instance(
+        [st("a", near(0, 0), 3, 17, dep=12.5), st("b", near(200, 0), 15, 5)], DEPOT, Params(vans=2)
+    )
+    save_instance(inst, datetime(2026, 10, 20, 8), "test", tmp_path / "i.json")
+    back, start, source = load_instance(tmp_path / "i.json")
+    assert back == inst and start == datetime(2026, 10, 20, 8) and source == "test"
