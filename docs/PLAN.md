@@ -34,7 +34,7 @@ A ✅ means the check has passed. A ⬜ means it hasn't been done yet.
 
 Create the folder, the tools, and these planning documents.
 
-- ✅ The automatic checks run and pass (81 tests).
+- ✅ The automatic checks run and pass (81 Python tests + 7 dbt known-answer tests).
 
 ---
 
@@ -113,7 +113,7 @@ any time: months already saved are skipped unless Citi Bike changes the file.
 - ✅ Holidays include the obvious ones (46 holidays, 2025–2027).
 
 ## Step 3: Organise the data into clean tables
-**Status: in progress**
+**Status: almost done (Oct 20, 2026). The van-move rule needs tightening.**
 
 **What it does:** turns the raw files into clean, tidy tables that the later steps
 read from, using **dbt** (a standard tool for building and testing data tables
@@ -140,12 +140,24 @@ uploaded every 15 minutes, so a tighter limit would raise false alarms.)
 
 **Lineage:** dbt draws a diagram of which table is built from which.
 
-**Checks**
-- ⬜ All the automatic data checks pass on the real data.
-- ⬜ The freshness check passes.
-- ⬜ The minute table's bike counts match the raw readings at the moments they
-  were taken.
-- ⬜ 10 detected van moves checked by hand against the raw readings.
+**Checks** (first real build, Oct 20, 2026, on GitHub)
+- ✅ All the automatic data checks pass: 41 passed, 2 warnings, 0 errors.
+  - Warning: 10,239 rides (0.02%) last over a day. This is normal in Citi Bike data
+    (unreturned bikes are closed out later), so it only warns.
+  - Warning: 482 rides end before they start, **all 482 on the night the clocks went
+    back** (Nov 2, 2025), as predicted. The files don't say which 1am a time means.
+- ✅ The freshness check passes. On its very first run it **failed correctly**: it
+  caught the real 80-minute recorder gap from the evening before.
+- ✅ The minute table matches the raw readings at every moment they were taken.
+- ⬜ **Van moves checked by hand: not passed yet.** Of 10 sampled, a few are clearly
+  vans (e.g. 10 Ave & W 28 St lost 5 bikes in one minute), but several are borderline
+  (e.g. −4, −1, −1 at 6pm rush hour) and could be riders. 139 "van visits" in ~3 hours
+  is more than expected. The rule (6+ bikes in 3 minutes) is too loose. Next: require
+  a bigger single-minute jump, then confirm against October's trips when they're published.
+
+**What the tables hold so far:** 45.4M rides; 2,519 stations; 672,573
+station-minutes (about 4 hours of live data; recorder up 69% of that window
+because of the gap); 4.5% of station-minutes empty, 8.5% full.
 
 **Known limit:** the trips for October 2026 won't be published until about
 mid-November, so for now van moves are detected from the size of the jump

@@ -28,4 +28,10 @@ Plan van moves for a real zone and time (Step 5), also on GitHub:
 gh workflow run plan.yml -f start=08:00 -f vans=3
 ```
 
+Build the clean tables with dbt (Step 3), on GitHub; also runs every 6 hours:
+
+```bash
+gh workflow run transform.yml
+```
+
 Parquet lands in `data/lake/<table>/date=YYYY-MM-DD/hour=HH/`.
