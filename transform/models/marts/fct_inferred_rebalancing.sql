@@ -1,4 +1,4 @@
--- Likely Lyft van visits (rule v2, see docs/DESIGN.md).
+-- Likely Lyft van visits (rule v3, see docs/DESIGN.md).
 -- A run of 1-3 consecutive recorded minutes where a station's total bikes (available
 -- + disabled) move the same way by n bikes is flagged when riders would almost never
 -- do that: under a Poisson model with the station's usual departure (or arrival) rate
@@ -8,7 +8,7 @@
 
 {% set busy_day_factor = 2.0 %}
 {% set max_p = 0.001 %}
-{% set min_bikes = 5 %}
+{% set min_bikes = 7 %}  {# groups of friends rarely rent or return more than 6 together #}
 
 with per_minute as (
     select
@@ -61,10 +61,14 @@ with_context as (
     select
         e.*,
         timezone('America/New_York', e.started_minute) as started_local,
-        v.short_name
+        v.short_name,
+        v.region_id
     from events as e
     asof join {{ ref('int_station_versions') }} as v
         on e.station_id = v.station_id and e.started_minute >= v.valid_from
+    -- Jersey City (70) and Hoboken (311) trips are published in separate files we don't
+    -- download, so their profiles look nearly empty and every change would be flagged.
+    where v.region_id not in ('70', '311')
 ),
 
 with_rates as (
