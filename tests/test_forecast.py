@@ -89,6 +89,7 @@ def small_leaves():
 def con(raw):
     c = db.connect()
     train.build_table(c, raw)
+    train.build_capacity(c, None)
     return c
 
 
@@ -110,18 +111,27 @@ def test_rain_comes_from_the_forecast_for_that_local_hour(con):
     assert precip == 3.0
 
 
-def test_model_beats_averages_when_weather_matters(con):
-    results, report = train.evaluate(con, sample=10_000_000)
-    dep = results["departures"]
-    assert dep["model_rush"]["mae"] < dep["averages_rush"]["mae"]
-    assert "September 2026 test" in report
+def test_both_variants_beat_averages_when_weather_matters(con):
+    results, chosen, report = train.evaluate(con, sample=10_000_000)
+    assert set(results) == {"v1", "v2"} and chosen in results
+    for variant in results.values():
+        dep = variant["departures"]
+        assert dep["model_rush"]["mae"] < dep["averages_rush"]["mae"]
+    assert "September 2026 test" in report and f"**Chosen: {chosen}**" in report
 
 
-def test_saved_model_predicts_less_riding_in_the_rain(con, tmp_path):
-    metrics, _ = train.evaluate(con, sample=10_000_000)
-    assert train.approved(metrics)
-    train.train_production(con, tmp_path, 10_000_000, metrics)
-    model = DemandModel.load(tmp_path / "demand.joblib", tmp_path / "profile_features.parquet")
+@pytest.mark.parametrize("variant", ["v1", "v2"])
+def test_saved_model_predicts_less_riding_in_the_rain(con, tmp_path, variant):
+    results, _, _ = train.evaluate(con, sample=10_000_000)
+    assert train.approved(results[variant])
+    train.train_production(con, tmp_path, 10_000_000, variant, results[variant])
+    model = DemandModel.load(
+        tmp_path / "demand.joblib",
+        tmp_path / "profile_features.parquet",
+        tmp_path / "profile_dow.parquet",
+        tmp_path / "profile_recent.parquet",
+    )
+    assert model.features == train.VARIANTS[variant]["features"]
     start = datetime(2026, 9, 15, 8, 0)  # a Tuesday
     utc8 = start.replace(tzinfo=NY).astimezone(UTC)
     dry = model.hourly(["1.01"], start, 0, {utc8: (20.0, 0.0, 0.0, 10.0)})["1.01"][8][0]
@@ -141,7 +151,7 @@ def test_unapproved_model_is_refused(con, tmp_path):
         }
     }
     assert not train.approved(worse) and not train.approved({})
-    train.train_production(con, tmp_path, 10_000_000, worse)
+    train.train_production(con, tmp_path, 10_000_000, "v1", worse)
     with pytest.raises(ModelNotApproved):
         DemandModel.load(tmp_path / "demand.joblib", tmp_path / "profile_features.parquet")
 
@@ -156,3 +166,27 @@ def test_daylight_matches_between_training_sql_and_live_python():
     assert daylight_hours(date(2026, 9, 15)) == pytest.approx(
         daylight_hours(date(2026, 3, 28)), abs=0.2
     )  # September looks like spring: seen in training
+
+
+def test_choose_prefers_the_better_approved_variant_and_v1_on_ties():
+    def m(model_rush, avg_rush=2.0):
+        r = {
+            "model": {"mae": 1.0},
+            "averages": {"mae": 1.5},
+            "model_rush": {"mae": model_rush},
+            "averages_rush": {"mae": avg_rush},
+        }
+        return {"departures": r, "arrivals": r}
+
+    assert train.choose({"v1": m(1.8), "v2": m(1.7)}) == "v2"
+    assert train.choose({"v1": m(1.8), "v2": m(1.8)}) == "v1"
+    assert train.choose({"v1": m(1.8), "v2": m(2.5)}) == "v1"  # v2 isn't approved
+    assert train.choose({"v1": m(2.5)}) is None
+
+
+def test_recent_rows_weigh_more(con):
+    train.build_profiles(con, "w", f"hour_local < '{train.TRAIN_END}'", train.TRAIN_END)
+    *_, w = train.matrix(
+        con, "w", f"hour_local < '{train.TRAIN_END}'", train.FEATURES_V2, None, train.TRAIN_END, 120
+    )
+    assert w.max() <= 1.0 and w.min() < 0.8  # June rows count less than late July

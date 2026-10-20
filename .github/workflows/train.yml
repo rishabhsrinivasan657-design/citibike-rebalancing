@@ -29,6 +29,6 @@ jobs:
       - name: Download trips, weather and holidays
         run: uv run warehouse pull --work work
       - name: Train and test
-        run: uv run forecast-train --raw work/raw --out work/models
+        run: uv run forecast-train --raw work/raw --lake work/lake --out work/models
       - name: Save model to Hugging Face
         run: uv run warehouse push-models --work work

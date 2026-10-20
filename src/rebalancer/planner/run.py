@@ -182,15 +182,26 @@ def predicted_rates(
     """Step 4 predictions for every station, for the hours the plan covers."""
     from rebalancer.forecast.predict import DemandModel, fetch_weather
 
+    model_path = model_path or hub_file("models/demand.joblib")
+    import joblib
+
+    needs = set(joblib.load(model_path).get("features", []))
+
+    def extra(name: str, used: bool) -> Path | None:
+        return hub_file(f"models/{name}.parquet") if used else None
+
     model = DemandModel.load(
-        model_path or hub_file("models/demand.joblib"),
+        model_path,
         profile_features_path or hub_file("models/profile_features.parquet"),
+        extra("profile_dow", "dow_avg_departures" in needs),
+        extra("profile_recent", "recent_avg_departures" in needs),
     )
     with httpx.Client(timeout=30) as client:
         weather = fetch_weather(client, start.date())
     hours = int((start.minute + minutes) // 60) + 1
     names = sorted({i.short_name for i in info if i.short_name})
-    return model.hourly(names, start, hours, weather)
+    capacity = {i.short_name: float(i.capacity) for i in info if i.short_name}
+    return model.hourly(names, start, hours, weather, capacity)
 
 
 def load_profile(path: Path | None) -> list[dict]:

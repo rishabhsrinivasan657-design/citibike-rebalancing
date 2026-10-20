@@ -6,7 +6,7 @@ historical-forecast archive (what was forecast at the time) for past days.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 
@@ -74,26 +74,61 @@ def fetch_weather(client: httpx.Client, day: date) -> Weather:
 class DemandModel:
     bundle: dict
     profile: dict[tuple[str, str, int], tuple[float, float]]
+    dow_profile: dict[tuple[str, int, int], tuple[float, float]] = field(default_factory=dict)
+    recent_profile: dict[tuple[str, str, int], tuple[float, float]] = field(default_factory=dict)
+
+    @property
+    def features(self) -> list[str]:
+        return self.bundle.get("features", FEATURES)
 
     @classmethod
-    def load(cls, model_path: Path, profile_path: Path) -> DemandModel:
-        rows = pq.read_table(profile_path).to_pylist()
-        profile = {
-            (r["short_name"], r["day_type"], r["hour"]): (r["avg_departures"], r["avg_arrivals"])
-            for r in rows
-        }
+    def load(
+        cls,
+        model_path: Path,
+        profile_path: Path,
+        dow_path: Path | None = None,
+        recent_path: Path | None = None,
+    ) -> DemandModel:
         bundle = joblib.load(model_path)
         if not bundle.get("approved") or not approved(bundle.get("metrics", {})):
             raise ModelNotApproved("the saved demand model didn't beat the averages")
-        return cls(bundle, profile)
+
+        def table(path, keys, cols):
+            if path is None:
+                return {}
+            return {
+                tuple(r[k] for k in keys): tuple(r[c] for c in cols)
+                for r in pq.read_table(path).to_pylist()
+            }
+
+        return cls(
+            bundle,
+            table(
+                profile_path, ("short_name", "day_type", "hour"), ("avg_departures", "avg_arrivals")
+            ),
+            table(
+                dow_path, ("short_name", "dow", "hour"), ("dow_avg_departures", "dow_avg_arrivals")
+            ),
+            table(
+                recent_path,
+                ("short_name", "day_type", "hour"),
+                ("recent_avg_departures", "recent_avg_arrivals"),
+            ),
+        )
 
     def hourly(
-        self, short_names: list[str], start_local: datetime, hours: int, weather: Weather
+        self,
+        short_names: list[str],
+        start_local: datetime,
+        hours: int,
+        weather: Weather,
+        capacity: dict[str, float] | None = None,
     ) -> dict[str, dict[int, tuple[float, float]]]:
         """{short_name: {local hour: (departures, arrivals)}} for each hour from start."""
         from zoneinfo import ZoneInfo
 
         ny = ZoneInfo("America/New_York")
+        capacity = capacity or {}
         first = start_local.replace(minute=0, second=0, microsecond=0)
         rows, keys = [], []
         for k in range(hours + 1):
@@ -105,6 +140,8 @@ class DemandModel:
             dow = (t.weekday() + 1) % 7  # DuckDB dayofweek: Sunday = 0
             for sn in short_names:
                 avg_d, avg_a = self.profile.get((sn, day_type, t.hour), (0.0, 0.0))
+                dow_d, dow_a = self.dow_profile.get((sn, dow, t.hour), (0.0, 0.0))
+                rec_d, rec_a = self.recent_profile.get((sn, day_type, t.hour), (0.0, 0.0))
                 values = {
                     "avg_departures": avg_d,
                     "avg_arrivals": avg_a,
@@ -116,8 +153,13 @@ class DemandModel:
                     "precip_mm": precip,
                     "snow_cm": snow,
                     "wind_kmh": wind,
+                    "dow_avg_departures": dow_d,
+                    "dow_avg_arrivals": dow_a,
+                    "recent_avg_departures": rec_d,
+                    "recent_avg_arrivals": rec_a,
+                    "capacity": capacity.get(sn, np.nan),
                 }
-                rows.append([values[f] for f in FEATURES])
+                rows.append([values[f] for f in self.features])
                 keys.append((sn, t.hour))
         x = np.array(rows, dtype=float)
         # Safety net: never predict more than 1.5x the busiest station-hour ever seen.
