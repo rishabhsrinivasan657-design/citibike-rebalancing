@@ -252,3 +252,20 @@ Known biases, stated in every report: hidden demand uses 12-month averages, not 
 day's demand; riders turned away at an empty station may go to a neighbour (not
 modelled, which favours rebalancing); van visits under the detection threshold count
 as riders.
+
+## Demand model (Step 4)
+
+Target: departures and arrivals per station (trip-file `short_name`) per local hour.
+Two `HistGradientBoostingRegressor(loss="poisson")` models (counts are non-negative
+and skewed; Poisson loss predicts means directly).
+
+| Item | Choice |
+|---|---|
+| Training rows | Every station-hour between the station's first and last trip in the window, zeros included (~20M). A random 6M sample trains; validation and test use all rows. |
+| Features | profile departures/arrivals for (station, day type, hour); hour; day of week; holiday; month; forecast temperature, precipitation, snowfall, wind (Open-Meteo historical-forecast archive). |
+| Split | train Oct 2025–Jul 2026, validate Aug 2026 (early stopping), test Sep 2026, used once. |
+| Baseline | the profile itself (12-month averages for station, day type, hour). |
+| Metrics | MAE and Poisson deviance per station-hour, overall and 7–10am weekdays. |
+| Leakage guard | Only forecast weather; the profile used as a feature is computed from the **training months only** when evaluating. |
+| Runs on | GitHub Actions (`train.yml`); model + metrics pushed to `models/` in the history dataset. |
+| Live use | The app/planner fetches Open-Meteo's live forecast; backtests use the historical-forecast archive for that day. |

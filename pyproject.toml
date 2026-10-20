@@ -10,10 +10,12 @@ dependencies = [
     "holidays>=0.60",
     "httpx>=0.27",
     "huggingface-hub>=0.25",
+    "numpy>=2.0",
     "pulp>=2.9,<3",
     "pyarrow>=17",
     "pydantic>=2.8",
     "pydantic-settings>=2.4",
+    "scikit-learn>=1.5",
 ]
 
 [dependency-groups]
@@ -36,6 +38,7 @@ backfill = "rebalancer.backfill.cli:main"
 plan-moves = "rebalancer.planner.run:main"
 warehouse = "rebalancer.warehouse:main"
 backtest = "rebalancer.backtest.run:main"
+forecast-train = "rebalancer.forecast.train:main"
 
 [build-system]
 requires = ["hatchling"]

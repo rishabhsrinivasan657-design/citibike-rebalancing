@@ -53,6 +53,17 @@ def push(work: Path) -> None:
     )
 
 
+def push_models(work: Path) -> None:
+    api, _, history, _ = _api_and_repos()
+    api.upload_folder(
+        repo_id=history,
+        repo_type="dataset",
+        folder_path=str(work / "models"),
+        path_in_repo="models",
+        commit_message="Update demand model",
+    )
+
+
 def report(work: Path, sample: int = 10) -> str:
     m = (work / "marts").as_posix()
     con = duckdb.connect()
@@ -137,13 +148,15 @@ def report(work: Path, sample: int = 10) -> str:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("command", choices=["pull", "push", "report"])
+    parser.add_argument("command", choices=["pull", "push", "push-models", "report"])
     parser.add_argument("--work", type=Path, default=Path("work"))
     args = parser.parse_args()
     if args.command == "pull":
         pull(args.work)
     elif args.command == "push":
         push(args.work)
+    elif args.command == "push-models":
+        push_models(args.work)
     else:
         text = report(args.work)
         print(text)

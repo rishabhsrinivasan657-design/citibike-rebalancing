@@ -181,23 +181,35 @@ because of the gap); 4.5% of station-minutes empty, 8.5% full.
 mid-November, so for now van moves are detected from the size of the jump
 alone. When those trips arrive, we can confirm that no riders explain them.
 
-## Step 4: Predict empty and full stations
-**Status: not started**
+## Step 4: Predict how busy each station will be
+**Status: in progress**
 
-**What it does:** for each station, predicts the chance it will be empty (or full)
-in the next 30 and 60 minutes. It looks at things like how many bikes it has now,
-how fast bikes are leaving, the time of day, the day of the week, and the weather.
+**What it does:** for each station and each hour, predicts how many riders will
+**take** a bike and how many will **return** one. The planner uses these instead of
+plain 12-month averages.
 
-**How we'll know it's good:** we compare it with two simple guesses:
-- "It'll stay like it is now."
-- "It'll do what it usually does at this time of day."
+**Why:** on Oct 20 the averages said 22 riders would find no bike in Midtown at 8am;
+the real number was 80. Averages ignore the season, the weather and the day.
 
-The model has to beat both. We only ever test it on days it hasn't seen, so the
-results are honest.
+**What it learns from:** the 12 months of trips (Step 2), plus things known *before*
+the hour starts:
+- the station's usual numbers for that hour (the averages, as a starting point)
+- hour, day of week, holiday, month
+- the weather **forecast** for that hour (not what the weather turned out to be,
+  because live we only have the forecast)
+
+**How we'll know it's good:** trained on Oct 2025 – Jul 2026, tuned on August, and
+tested once on **September 2026**, a month it never saw. It must beat the averages.
 
 **Checks**
-- ⬜ Beats both simple guesses on a week of data it has never seen.
-- ⬜ When it says "70% chance", it's right about 70% of the time.
+- ⬜ Beats the plain averages on September, overall and for the 7–10am rush.
+- ⬜ Uses no information from after the hour starts (forecast weather only).
+- ⬜ On the recorded Oct 20 morning, the planner with predictions does at least as
+  well in verification as with averages.
+
+**Not used (on purpose):** "how busy was this station in the last hour". Live, we
+only see bike counts, not separate pickups and returns, so the model couldn't get
+the same input it was trained on.
 
 ---
 
