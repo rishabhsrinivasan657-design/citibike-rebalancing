@@ -34,7 +34,7 @@ A ✅ means the check has passed. A ⬜ means it hasn't been done yet.
 
 Create the folder, the tools, and these planning documents.
 
-- ✅ The automatic checks run and pass (81 Python tests + 7 dbt known-answer tests).
+- ✅ The automatic checks run and pass (81 Python tests + 8 dbt known-answer tests).
 
 ---
 
@@ -113,7 +113,7 @@ any time: months already saved are skipped unless Citi Bike changes the file.
 - ✅ Holidays include the obvious ones (46 holidays, 2025–2027).
 
 ## Step 3: Organise the data into clean tables
-**Status: almost done (Oct 20, 2026). The van-move rule needs tightening.**
+**Status: done (Oct 20, 2026)**
 
 **What it does:** turns the raw files into clean, tidy tables that the later steps
 read from, using **dbt** (a standard tool for building and testing data tables
@@ -128,8 +128,10 @@ the `citibike-history` dataset on Hugging Face.
   times. (This is called a "slowly changing dimension", or SCD2.)
 - **Bikes at every station, every minute:** filling the gaps between readings,
   and marking minutes when the recorder was down or a station stopped reporting.
-- **Lyft's van moves:** a station that gains or loses 6+ bikes within 2 minutes is
-  almost certainly a van, not riders. This lets us compare our plan with Lyft's.
+- **Lyft's van moves:** a sudden jump in a station's bikes that riders at that
+  station would almost never cause at that time of day (less than a 1-in-1,000
+  chance, even on a day twice as busy as usual), of at least 7 bikes. This lets us
+  compare our plan with what Lyft really did.
 - **Recording health:** one row per minute saying whether we have data.
 
 **Automatic checks** run every time the tables are built: no duplicate rides,
@@ -149,11 +151,22 @@ uploaded every 15 minutes, so a tighter limit would raise false alarms.)
 - ✅ The freshness check passes. On its very first run it **failed correctly**: it
   caught the real 80-minute recorder gap from the evening before.
 - ✅ The minute table matches the raw readings at every moment they were taken.
-- ⬜ **Van moves checked by hand: not passed yet.** Of 10 sampled, a few are clearly
-  vans (e.g. 10 Ave & W 28 St lost 5 bikes in one minute), but several are borderline
-  (e.g. −4, −1, −1 at 6pm rush hour) and could be riders. 139 "van visits" in ~3 hours
-  is more than expected. The rule (6+ bikes in 3 minutes) is too loose. Next: require
-  a bigger single-minute jump, then confirm against October's trips when they're published.
+- ✅ **Van moves checked by hand.** It took three versions of the rule:
+  - **v1** (6+ bikes in 3 minutes, every station): 139 "visits" in ~3 hours.
+    Several were probably rush-hour riders at busy stations.
+  - **v2** (compare with each station's normal busyness): 5 of 10 clear vans,
+    4 borderline 5–6-bike changes (possibly groups of friends renting together),
+    and 1 wrong: Grove St PATH in Jersey City. Jersey City trips are in separate
+    files we don't download, so its stations looked almost unused.
+  - **v3** (at least 7 bikes; Jersey City and Hoboken skipped; a visit split by one
+    rider in the middle counts as one): **10 of 10 look like real van visits**,
+    8 clearly and 2 probably. 29 visits in ~4 hours of data.
+  - Final confirmation comes when October's trips are published (mid-November):
+    a real van visit shouldn't be explained by trips.
+
+**Found while testing:** some of my own test edits silently didn't apply after the
+code was reformatted, so two checks passed without testing anything. They're fixed,
+and a new guard test makes sure those test cases stay in the data.
 
 **What the tables hold so far:** 45.4M rides; 2,519 stations; 672,573
 station-minutes (about 4 hours of live data; recorder up 69% of that window
