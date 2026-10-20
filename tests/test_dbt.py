@@ -90,6 +90,15 @@ def write_weather_and_holidays(raw: Path) -> None:
                     "arrivals": 300.0,
                     "days": 22,
                 },
+                # Jersey City looks unused: its trips are in files we don't download
+                {
+                    "station_id": "2.01",
+                    "day_type": "weekday",
+                    "hour": 8,
+                    "departures": 0.1,
+                    "arrivals": 0.1,
+                    "days": 22,
+                },
             ]
         ),
         raw / "profiles" / "station_hour.parquet",
@@ -104,14 +113,14 @@ def write_weather_and_holidays(raw: Path) -> None:
 def write_lake(lake: Path) -> None:
     w = LakeWriter(str(lake))
 
-    def info(sid, short, cap, t):
+    def info(sid, short, cap, t, region="71"):
         return {
             "station_id": sid,
             "short_name": short,
             "name": f"Station {sid}",
             "lat": 40.75,
             "lon": -73.98,
-            "region_id": "71",
+            "region_id": region,
             "capacity": cap,
             "station_type": "classic",
             "has_kiosk": True,
@@ -131,6 +140,9 @@ def write_lake(lake: Path) -> None:
             info("C", "1.03", 15, t1),
             info("A", "1.01", 30, t2),
             info("B", "1.02", 25, t2),  # C removed
+            info("J", "2.01", 30, T0, region="70"),  # Jersey City
+            info("J", "2.01", 30, t1, region="70"),
+            info("J", "2.01", 30, t2, region="70"),
         ],
     )
 
@@ -158,9 +170,14 @@ def write_lake(lake: Path) -> None:
         status("C", 0, 3, 12),
         status("A", 1, 4, 26),
         status("A", 2, 9, 21),
-        status("A", 3, 14, 16),  # +10 in two minutes: a van
-        status("B", 4, 11, 14),
-        status("B", 4, 11, 14, run_offset_s=20),  # same reading from an overlapping run
+        status("A", 3, 14, 16),  # quiet station +10 in two minutes: a van...
+        status("A", 4, 13, 17),  # ...one rider takes a bike mid-visit...
+        status("A", 5, 21, 9),  # ...then the van unloads 8 more: still the same visit
+        status("B", 2, 13, 7),
+        status("B", 3, 16, 4),  # busy station +6 in two minutes: normal for riders
+        status("B", 3, 16, 4, run_offset_s=20),  # same reading from an overlapping run
+        status("J", 1, 5, 25),
+        status("J", 3, 15, 15),  # Jersey City +10: skipped, no reliable profile there
         status("A", 9, 13, 17),  # after the recorder gap at minutes 6-8
     ]
     w.write("station_status", rows)
@@ -265,18 +282,32 @@ def test_minute_table_fills_gaps_and_flags_recorder_down(built):
     )
     by_min = {int((r[0] - T0.replace(second=0)).total_seconds() // 60): r[1:] for r in rows}
     assert by_min[3] == (14, True)
-    assert by_min[5] == (14, True)  # carried forward, no change
-    assert by_min[7] == (14, False)  # recorder gap
+    assert by_min[5] == (21, True)
+    assert by_min[7] == (21, False)  # recorder gap: carried forward
     assert by_min[9] == (13, True)
 
 
-def test_van_drop_off_detected_once(built):
+def test_van_visits_quiet_station_only_and_split_visit_merged(built):
     rows = q(
         built,
-        "SELECT station_id, bikes_change, action, minutes "
-        "FROM read_parquet('MARTS/fct_inferred_rebalancing.parquet')",
+        "SELECT station_id, bikes_change, action, minutes, runs_merged, expected_riders, "
+        "p_riders < 1e-6 FROM read_parquet('MARTS/fct_inferred_rebalancing.parquet')",
     )
-    assert rows == [("A", 10, "drop_off", 2)]
+    # A: quiet station, +10 then (after one rider) +8 more: one van visit of +18.
+    # B: riders normally return ~10 bikes in 2 minutes there, so +6 isn't flagged.
+    # J: Jersey City is skipped (no reliable profile), despite its +10.
+    assert rows == [("A", 18, "drop_off", 3, 2, 0.3, True)]
+
+
+def test_busy_and_jersey_city_cases_are_really_in_the_data(built):
+    # Guards against the fixture silently missing the cases the test above relies on.
+    rows = q(
+        built,
+        "SELECT station_id, max(num_bikes_available) - min(num_bikes_available) "
+        "FROM read_parquet('MARTS/fct_station_minute.parquet') "
+        "WHERE station_id IN ('B', 'J') GROUP BY 1 ORDER BY 1",
+    )
+    assert rows == [("B", 6), ("J", 10)]
 
 
 def test_recorder_health_shows_the_gap(built):
@@ -294,4 +325,4 @@ def test_report_lists_tables_and_van_visits(built):
     text = report(built.parent)
     assert "| fct_trips | 3 rides" in text
     assert "1 likely van visits (1 drop-offs)" in text
-    assert "**Station A**: +10 bikes in 2 min (riders usually ~0.2)" in text
+    assert "**Station A**: +18 bikes in 3 min (riders usually ~0.3)" in text

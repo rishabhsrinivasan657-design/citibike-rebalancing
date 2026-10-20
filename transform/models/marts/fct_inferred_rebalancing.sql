@@ -106,18 +106,44 @@ scored as (
             )
         )) as p_riders
     from rated
+),
+
+flagged as (
+    select *, case when bikes_change > 0 then 'drop_off' else 'pick_up' end as action
+    from scored
+    where p_riders < {{ max_p }}
+),
+
+-- A rider in the middle of a van visit splits it into two runs; same-direction
+-- flagged runs at a station less than 10 minutes apart are one visit.
+visits as (
+    select
+        *,
+        sum(new_visit) over (partition by station_id order by started_minute) as visit_id
+    from (
+        select
+            *,
+            case
+                when started_minute - lag(ended_minute) over w < interval 10 minute
+                    and lag(action) over w = action
+                then 0 else 1
+            end as new_visit
+        from flagged
+        window w as (partition by station_id order by started_minute)
+    )
 )
 
 select
     station_id,
-    started_minute,
-    ended_minute,
-    minutes,
-    bikes_change,
-    case when bikes_change > 0 then 'drop_off' else 'pick_up' end as action,
-    day_type,
-    local_hour,
-    round(expected_riders, 2) as expected_riders,
-    p_riders
-from scored
-where p_riders < {{ max_p }}
+    min(started_minute) as started_minute,
+    max(ended_minute) as ended_minute,
+    sum(minutes)::integer as minutes,
+    sum(bikes_change)::integer as bikes_change,
+    any_value(action) as action,
+    any_value(day_type) as day_type,
+    any_value(local_hour) as local_hour,
+    round(sum(expected_riders), 2) as expected_riders,
+    min(p_riders) as p_riders,
+    count(*) as runs_merged
+from visits
+group by station_id, visit_id
