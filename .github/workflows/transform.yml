@@ -36,15 +36,16 @@ jobs:
         run: uv run warehouse pull --work work && mkdir -p work/marts
       - name: Build tables and run data tests
         run: uv run dbt build --project-dir transform
-      - name: Freshness check on live data
-        run: uv run dbt source freshness --project-dir transform
       - name: Lineage docs
         run: uv run dbt docs generate --project-dir transform --static
       - name: Save tables to Hugging Face
         run: uv run warehouse push --work work
       - name: Summary
         run: uv run warehouse report --work work
+      - name: Freshness check on live data (last, so tables are saved even if stale)
+        run: uv run dbt source freshness --project-dir transform
       - uses: actions/upload-artifact@v4
+        if: always()
         with:
           name: dbt-docs
           path: transform/target/static_index.html
