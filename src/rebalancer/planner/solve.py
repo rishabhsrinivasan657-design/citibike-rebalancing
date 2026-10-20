@@ -10,6 +10,8 @@ import pulp
 
 from rebalancer.planner.geo import drive_minutes
 from rebalancer.planner.model import (
+    HANDLE_FIXED_MIN,
+    HANDLE_PER_BIKE_MIN,
     SAFETY_BUFFER,
     Instance,
     Station,
@@ -111,10 +113,15 @@ def choose_transfers(inst: Instance) -> tuple[list[Transfer], str]:
     cap = {pr: math.floor(useful(by_id[pr[0]], by_id[pr[1]])) for pr in pairs}
 
     m = pulp.LpProblem("rebalance", pulp.LpMinimize)
-    # Bikes are continuous here and rounded down afterwards (rounding down can't break a
-    # limit); only trip counts must be whole numbers. Much faster to solve.
+    # A trip = one pickup at a donor, then up to `max_stops` drop-offs, so one van load
+    # can relieve a full station *and* top up several empty ones.
+    # x: bikes from donor i to stop j (continuous, rounded down afterwards; rounding down
+    #    can't break a limit). w: whether j is a stop on some trip from i.
+    # y: number of trips (pickups) from donor i.
     x = {pr: pulp.LpVariable(f"x_{n}", 0) for n, pr in enumerate(pairs)}
-    z = {pr: pulp.LpVariable(f"z_{n}", 0, cat="Integer") for n, pr in enumerate(pairs)}
+    w = {pr: pulp.LpVariable(f"w_{n}", cat="Binary") for n, pr in enumerate(pairs)}
+    donor_ids = sorted({i for i, _ in pairs})
+    y = {i: pulp.LpVariable(f"y_{k}", 0, cat="Integer") for k, i in enumerate(donor_ids)}
     involved = {i for pr in pairs for i in pr}
     short = {i: pulp.LpVariable(f"short_{k}", 0) for k, i in enumerate(involved)}
     over = {i: pulp.LpVariable(f"over_{k}", 0) for k, i in enumerate(involved)}
@@ -127,13 +134,16 @@ def choose_transfers(inst: Instance) -> tuple[list[Transfer], str]:
 
     weights = {sid: urgency_weight(by_id[sid], h) for sid in involved}
     m += pulp.lpSum(weights[s] * (short[s] + over[s]) for s in involved) + p.drive_cost_per_min * (
-        pulp.lpSum(tau[pr] * z[pr] for pr in pairs)
+        pulp.lpSum(tau[pr] * w[pr] for pr in pairs) + deadhead * pulp.lpSum(y.values())
     )
 
     for pr in pairs:
-        m += x[pr] <= p.van_capacity * z[pr]
-        m += x[pr] <= cap[pr]
-        m += z[pr] <= math.ceil(cap[pr] / p.van_capacity)  # no pointless empty trips
+        m += x[pr] <= cap[pr] * w[pr]  # several trips may serve the same stop
+    for i in donor_ids:
+        out_pairs = [pr for pr in pairs if pr[0] == i]
+        m += pulp.lpSum(x[pr] for pr in out_pairs) <= p.van_capacity * y[i]
+        m += pulp.lpSum(w[pr] for pr in out_pairs) <= p.max_stops * y[i]
+        m += y[i] <= math.ceil(sum(cap[pr] for pr in out_pairs) / p.van_capacity)
     for sid in involved:
         st = by_id[sid]
         end = st.projected + flow_in(sid) - flow_out(sid)
@@ -141,8 +151,15 @@ def choose_transfers(inst: Instance) -> tuple[list[Transfer], str]:
         m += flow_in(sid) <= st.docks
         m += short[sid] >= SAFETY_BUFFER - end
         m += over[sid] >= end - (st.capacity - SAFETY_BUFFER)
-    per_trip = handling_minutes(p.van_capacity) * 2 + deadhead
-    m += pulp.lpSum(z[pr] * (tau[pr] + per_trip) for pr in pairs) <= p.vans * h
+    # Van time: each trip drives empty to its donor and loads; each stop is a drive from
+    # the donor (an overestimate when stops are close together) plus unloading; every
+    # bike is handled twice. Stage 2 recomputes all of this with real routes.
+    m += (
+        pulp.lpSum(y[i] * (deadhead + HANDLE_FIXED_MIN) for i in donor_ids)
+        + pulp.lpSum(w[pr] * (tau[pr] + HANDLE_FIXED_MIN) for pr in pairs)
+        + 2 * HANDLE_PER_BIKE_MIN * pulp.lpSum(x.values())
+        <= p.vans * h
+    )
 
     # Accept a plan proven within 1% of the best possible; proving the last 1% can take
     # far longer and doesn't change the moves in a way that matters.
@@ -157,6 +174,5 @@ def choose_transfers(inst: Instance) -> tuple[list[Transfer], str]:
     for pr in pairs:
         bikes = math.floor((x[pr].value() or 0) + 1e-6)
         if bikes > 0:
-            trips = max(1, math.ceil(bikes / p.van_capacity))
-            out.append(Transfer(pr[0], pr[1], bikes, trips))
+            out.append(Transfer(pr[0], pr[1], bikes, max(1, math.ceil(bikes / p.van_capacity))))
     return out, status

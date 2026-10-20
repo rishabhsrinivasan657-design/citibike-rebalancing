@@ -286,3 +286,56 @@ def test_saved_instance_round_trips(tmp_path):
     save_instance(inst, datetime(2026, 10, 20, 8), "test", tmp_path / "i.json")
     back, start, source = load_instance(tmp_path / "i.json")
     assert back == inst and start == datetime(2026, 10, 20, 8) and source == "test"
+
+
+def test_one_trip_relieves_a_full_station_and_tops_up_two_empty_ones():
+    inst, result = run(
+        [
+            st("full", near(0, 0), 20, 0, arr=15),  # overflowing
+            st("empty1", near(400, 0), 0, 20, dep=8),
+            st("empty2", near(400, 300), 0, 20, dep=8),
+            st("roomy", near(-300, 0), 2, 30),
+        ],
+        vans=1,
+    )
+    first_trip = [m for m in result.moves if m.van == 1 and m.trip == 1]
+    assert {m.from_id for m in first_trip} == {"full"}
+    assert {"empty1", "empty2"} <= {m.to_id for m in result.moves}
+    s = score(inst, result)
+    assert s["no_bike_with_plan"] < s["no_bike_no_moves"]
+    assert s["no_dock_with_plan"] < s["no_dock_no_moves"]
+
+
+def test_multi_stop_trips_respect_load_and_stop_limits():
+    stations = [st("d", near(0, 0), 60, 0, arr=20)] + [
+        st(f"e{k}", near(150 * k, 200), 0, 20, dep=6) for k in range(6)
+    ]
+    _, result = run(stations, vans=1, max_stops=3)
+    by_trip: dict = {}
+    for m in result.moves:
+        by_trip.setdefault((m.van, m.trip), []).append(m)
+    assert by_trip
+    for legs in by_trip.values():
+        assert sum(m.bikes for m in legs) <= 25 and len(legs) <= 3
+
+
+def test_verify_checks_whole_trips():
+    inst = Instance(
+        [
+            st("a", near(0, 0), 40, 0),
+            st("b", near(100, 0), 0, 20),
+            st("c", near(200, 0), 0, 20),
+            st("x", near(0, 100), 10, 0),
+        ],
+        DEPOT,
+        Params(max_stops=1),
+    )
+    legs = [
+        Move(1, 1, "a", "b", 15, 4.0, 9.0, 60.0, trip=1),
+        Move(1, 2, "a", "c", 15, 4.0, 12.0, 60.0, trip=1),
+        Move(1, 3, "x", "c", 1, 4.0, 13.0, 60.0, trip=1),
+    ]
+    problems = " ".join(verify(inst, Plan(legs, [], 0, "")))
+    assert "trip 1: carries 31 bikes" in problems
+    assert "trip 1: 3 stops" in problems
+    assert "more than one pickup station" in problems

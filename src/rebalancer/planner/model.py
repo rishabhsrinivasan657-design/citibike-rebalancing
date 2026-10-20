@@ -39,6 +39,7 @@ class Params:
     max_receivers: int = 25
     max_donors: int = 25
     drive_cost_per_min: float = 0.01
+    max_stops: int = 4  # drop-off stops per trip (one pickup, then up to this many drops)
     solver_time_limit_s: int = 25
 
 
@@ -63,6 +64,7 @@ class Move:
     pickup_at_min: float  # minutes after plan start, when loading finishes
     arrive_at_min: float  # when unloading finishes at the receiver
     deadline_min: float  # when the receiver is expected to run empty (or full)
+    trip: int | None = None  # legs with the same van and trip share one pickup
 
 
 @dataclass

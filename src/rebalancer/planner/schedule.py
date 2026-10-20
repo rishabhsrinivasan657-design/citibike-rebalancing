@@ -16,59 +16,114 @@ from rebalancer.planner.model import (
 from rebalancer.planner.solve import Transfer, choose_transfers
 
 
+def _pack_trips(inst: Instance, transfers: list[Transfer]) -> list[tuple[float, str, list]]:
+    """Group transfers by donor into trips of at most `van_capacity` bikes and
+    `max_stops` drop-offs, most urgent stops first.
+
+    Returns (earliest deadline, donor, [(deadline, receiver, bikes), ...]) per trip,
+    most urgent trip first.
+    """
+    p = inst.params
+    h = p.horizon_min
+    by_id = inst.by_id()
+    by_donor: dict[str, list[tuple[float, str, int]]] = {}
+    for t in transfers:
+        deadline = min(h, minutes_until_problem(by_id[t.to_id], h))
+        by_donor.setdefault(t.from_id, []).append((deadline, t.to_id, t.bikes))
+
+    trips: list[tuple[float, str, list]] = []
+    for donor, drops in by_donor.items():
+        current: list[tuple[float, str, int]] = []
+        load = 0
+        for deadline, to_id, bikes in sorted(drops):
+            while bikes > 0:
+                if load == p.van_capacity or len(current) == p.max_stops:
+                    trips.append((current[0][0], donor, current))
+                    current, load = [], 0
+                q = min(bikes, p.van_capacity - load)
+                current.append((deadline, to_id, q))
+                load += q
+                bikes -= q
+        if current:
+            trips.append((current[0][0], donor, current))
+    return sorted(trips, key=lambda t: (t[0], t[1]))
+
+
 def schedule(inst: Instance, transfers: list[Transfer]) -> Plan:
     p = inst.params
     h = p.horizon_min
     lat0, lon0 = inst.depot
     by_id = inst.by_id()
 
-    trips: list[tuple[float, str, str, int]] = []  # (deadline, from, to, bikes)
-    for t in transfers:
-        left = t.bikes
-        for _ in range(t.trips):
-            q = min(left, p.van_capacity)
-            if q <= 0:
-                break
-            deadline = min(h, minutes_until_problem(by_id[t.to_id], h))
-            trips.append((deadline, t.from_id, t.to_id, q))
-            left -= q
-    trips.sort()
+    def loc(sid: str) -> tuple[float, float]:
+        return (by_id[sid].lat, by_id[sid].lon)
 
     van_free = [0.0] * p.vans
     van_at = [inst.depot] * p.vans
-    van_count = [0] * p.vans
+    van_legs = [0] * p.vans
+    van_trips = [0] * p.vans
     taken = dict.fromkeys(by_id, 0)  # bikes removed from each station so far
     given = dict.fromkeys(by_id, 0)  # bikes delivered to each station so far
     moves: list[Move] = []
     dropped: list[tuple[str, str, int, str]] = []
 
-    for deadline, a, b, q in trips:
-        sa, sb = by_id[a], by_id[b]
-        q = min(q, sa.bikes - taken[a], sb.docks - given[b])
-        if q <= 0:
-            dropped.append((a, b, 0, "no bikes or docks left"))
+    for _, donor, drops in _pack_trips(inst, transfers):
+        # Limit each drop to what's physically left at the donor and the receiver.
+        legs = []
+        left = by_id[donor].bikes - taken[donor]
+        for deadline, to_id, q in drops:
+            q = min(q, left, by_id[to_id].docks - given[to_id])
+            if q <= 0:
+                dropped.append((donor, to_id, 0, "no bikes or docks left"))
+                continue
+            legs.append((deadline, to_id, q))
+            left -= q
+        if not legs:
             continue
-        best = None
-        for v in range(p.vans):
-            pick = (
-                van_free[v]
-                + drive_minutes(van_at[v], (sa.lat, sa.lon), lat0, lon0)
-                + handling_minutes(q)
+
+        def route(v: int, legs: list, donor: str = donor) -> tuple[float, float, list[float]]:
+            load = sum(q for _, _, q in legs)
+            pick = van_free[v] + drive_minutes(van_at[v], loc(donor), lat0, lon0)
+            pick += handling_minutes(load)
+            t, at, arrivals = pick, loc(donor), []
+            for _, to_id, q in legs:
+                t += drive_minutes(at, loc(to_id), lat0, lon0) + handling_minutes(q)
+                arrivals.append(t)
+                at = loc(to_id)
+            return t, pick, arrivals
+
+        best = min(range(p.vans), key=lambda v: route(v, legs)[0])
+        finish, pick, arrivals = route(best, legs)
+        # If the whole trip doesn't fit in the shift, drop the least urgent stops.
+        while legs and finish > h:
+            _, to_id, q = legs.pop()
+            dropped.append((donor, to_id, q, "would finish after the shift"))
+            if legs:
+                best = min(range(p.vans), key=lambda v: route(v, legs)[0])
+                finish, pick, arrivals = route(best, legs)
+        if not legs:
+            continue
+
+        van_trips[best] += 1
+        for (deadline, to_id, q), arrive in zip(legs, arrivals, strict=True):
+            van_legs[best] += 1
+            moves.append(
+                Move(
+                    best + 1,
+                    van_legs[best],
+                    donor,
+                    to_id,
+                    q,
+                    pick,
+                    arrive,
+                    deadline,
+                    trip=van_trips[best],
+                )
             )
-            arrive = pick + drive_minutes((sa.lat, sa.lon), (sb.lat, sb.lon), lat0, lon0)
-            arrive += handling_minutes(q)
-            if best is None or arrive < best[0]:
-                best = (arrive, pick, v)
-        arrive, pick, v = best
-        if arrive > h:
-            dropped.append((a, b, q, f"would finish at {arrive:.0f} min, after the shift"))
-            continue
-        van_count[v] += 1
-        moves.append(Move(v + 1, van_count[v], a, b, q, pick, arrive, deadline))
-        van_free[v] = arrive
-        van_at[v] = (sb.lat, sb.lon)
-        taken[a] += q
-        given[b] += q
+            given[to_id] += q
+            taken[donor] += q
+        van_free[best] = finish
+        van_at[best] = loc(legs[-1][1])
 
     moves.sort(key=lambda m: (m.van, m.order))
     return Plan(moves=moves, dropped=dropped, solve_seconds=0.0, status="")
@@ -82,33 +137,49 @@ def verify(inst: Instance, plan: Plan) -> list[str]:
     problems = []
     taken: dict[str, int] = {}
     given: dict[str, int] = {}
-    vans: dict[int, list[Move]] = {}
+    trips: dict[tuple[int, int], list[Move]] = {}
     for m in plan.moves:
-        vans.setdefault(m.van, []).append(m)
-        if not 0 < m.bikes <= p.van_capacity:
-            problems.append(f"van {m.van} trip {m.order}: carries {m.bikes} bikes")
+        trips.setdefault((m.van, m.trip if m.trip is not None else -m.order), []).append(m)
+        if m.bikes <= 0:
+            problems.append(f"van {m.van} leg {m.order}: carries {m.bikes} bikes")
         if m.from_id == m.to_id:
-            problems.append(f"van {m.van} trip {m.order}: same pickup and drop-off")
+            problems.append(f"van {m.van} leg {m.order}: same pickup and drop-off")
         taken[m.from_id] = taken.get(m.from_id, 0) + m.bikes
         given[m.to_id] = given.get(m.to_id, 0) + m.bikes
         if m.arrive_at_min > p.horizon_min + 1e-6:
-            problems.append(f"van {m.van} trip {m.order}: finishes after the shift")
+            problems.append(f"van {m.van} leg {m.order}: finishes after the shift")
     for sid, n in taken.items():
         if n > by_id[sid].bikes:
             problems.append(f"{sid}: takes {n} bikes but only {by_id[sid].bikes} there")
     for sid, n in given.items():
         if n > by_id[sid].docks:
             problems.append(f"{sid}: drops {n} bikes but only {by_id[sid].docks} free docks")
-    for v, ms in vans.items():
+
+    vans: dict[int, list[list[Move]]] = {}
+    for (v, _), legs in trips.items():
+        legs.sort(key=lambda m: m.order)
+        load = sum(m.bikes for m in legs)
+        k = legs[0].trip if legs[0].trip is not None else legs[0].order
+        if load > p.van_capacity:
+            problems.append(f"van {v} trip {k}: carries {load} bikes")
+        if len(legs) > p.max_stops:
+            problems.append(f"van {v} trip {k}: {len(legs)} stops")
+        if len({m.from_id for m in legs}) > 1:
+            problems.append(f"van {v} trip {k}: more than one pickup station")
+        vans.setdefault(v, []).append(legs)
+    for v, van_trips in vans.items():
         t, at = 0.0, inst.depot
-        for m in sorted(ms, key=lambda m: m.order):
-            a, b = by_id[m.from_id], by_id[m.to_id]
-            t += drive_minutes(at, (a.lat, a.lon), lat0, lon0) + handling_minutes(m.bikes)
-            t += drive_minutes((a.lat, a.lon), (b.lat, b.lon), lat0, lon0)
-            t += handling_minutes(m.bikes)
-            if t > m.arrive_at_min + 1e-6:
-                problems.append(f"van {v} trip {m.order}: arrival time is too optimistic")
-            t, at = max(t, m.arrive_at_min), (b.lat, b.lon)
+        for legs in sorted(van_trips, key=lambda legs: legs[0].order):
+            a = by_id[legs[0].from_id]
+            t += drive_minutes(at, (a.lat, a.lon), lat0, lon0)
+            t += handling_minutes(sum(m.bikes for m in legs))
+            at = (a.lat, a.lon)
+            for m in legs:
+                b = by_id[m.to_id]
+                t += drive_minutes(at, (b.lat, b.lon), lat0, lon0) + handling_minutes(m.bikes)
+                if t > m.arrive_at_min + 1e-6:
+                    problems.append(f"van {v} leg {m.order}: arrival time is too optimistic")
+                t, at = max(t, m.arrive_at_min), (b.lat, b.lon)
     return problems
 
 
@@ -170,5 +241,6 @@ def score(inst: Instance, result: Plan) -> dict[str, float]:
         "no_dock_no_moves": before["missed_returns"],
         "no_dock_with_plan": after["missed_returns"],
         "bikes_moved": sum(m.bikes for m in result.moves),
-        "trips": len(result.moves),
+        "trips": len({(m.van, m.trip if m.trip is not None else -m.order) for m in result.moves}),
+        "stops": len(result.moves),
     }

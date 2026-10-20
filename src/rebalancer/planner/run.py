@@ -120,12 +120,12 @@ def render(
         f"**{s['riders_affected_with_plan']:.0f}** | "
         f"**{pct(s['riders_affected_no_moves'], s['riders_affected_with_plan'])}** |",
         "",
-        f"{s['trips']} trips, {s['bikes_moved']} bikes moved.",
+        f"{s['trips']} trips with {s['stops']} drop-off stops, {s['bikes_moved']} bikes moved.",
         "",
     ]
     if result.moves:
         lines += [
-            "| Van | # | Take from | Drop at | Bikes | Loaded by | Delivered by | Runs out at |",
+            "| Van | Trip | Take from | Drop at | Bikes | Loaded by | Delivered by | Runs out at |",
             "|---|---|---|---|---|---|---|---|",
         ]
         by_id = inst.by_id()
@@ -133,8 +133,8 @@ def render(
             t_out = minutes_until_problem(by_id[m.to_id], h)
             runs_out = clock(t_out) if t_out < h else "after the hour"
             lines.append(
-                f"| {m.van} | {m.order} | {names[m.from_id]} | {names[m.to_id]} | {m.bikes} | "
-                f"{clock(m.pickup_at_min)} | {clock(m.arrive_at_min)} | {runs_out} |"
+                f"| {m.van} | {m.trip or m.order} | {names[m.from_id]} | {names[m.to_id]} "
+                f"| {m.bikes} | {clock(m.pickup_at_min)} | {clock(m.arrive_at_min)} | {runs_out} |"
             )
     if result.dropped:
         lines += ["", f"{len(result.dropped)} chosen trips were dropped as not doable in time."]
