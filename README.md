@@ -100,3 +100,4 @@ The streaming version runs with `make up` (Redpanda + collector + lake sink in D
 - How each step was planned, built and tested: [docs/PLAN.md](docs/PLAN.md)
 - Architecture, data contracts and design decisions: [docs/DESIGN.md](docs/DESIGN.md)
 - Turning on 24/7 recording for free: [docs/SETUP_CLOUD.md](docs/SETUP_CLOUD.md)
+- Putting the app online: [docs/DEPLOY_APP.md](docs/DEPLOY_APP.md)
