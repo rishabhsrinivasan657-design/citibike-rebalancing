@@ -218,6 +218,24 @@ tested once on **September 2026**, a month it never saw. It must beat the averag
 - ✅ On the Oct 20 morning, the planner with predictions does at least as well:
   269 riders affected vs 271 with averages. That's within noise for one morning.
 
+**v2 (Oct 20, 2026): improved and kept.** Each training run now tests two versions
+side by side on September and keeps the better approved one. v2 adds day-of-week
+averages (Monday ≠ Friday), the station's last-3-months level, station size, and
+weights recent months more. ("Same hour last week" was left out: those trips aren't
+published in time for the live app.)
+
+| Predicting | Hours | v1 vs averages | **v2 vs averages** |
+|---|---|---|---|
+| Pickups | all | 12% better | **12% better** |
+| Pickups | weekday 7–10am | 10% better | **13% better** |
+| Returns | all | 10% better | **12% better** |
+| Returns | weekday 7–10am | 7% better | **10% better** |
+
+v2 is chosen. It still predicts ~15% too few riders in September (busier than most
+training months); the planned fix is a "how busy is today so far" input once ~2 weeks
+of live recordings exist. On the Oct 20 morning, plans made with v2 give 272 riders
+affected (v1: 269, averages: 271), the same within noise for one morning.
+
 **The first try failed, and was caught.** The first model did far *worse* than
 the averages: its maths became unstable (some predictions ~10^71), and "month"
 told it nothing about September, a month it never trained on. Fixes: regularisation,

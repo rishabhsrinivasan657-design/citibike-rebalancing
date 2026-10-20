@@ -44,7 +44,7 @@ flowchart LR
 | **History** | 45.4M trips, hourly weather (observed and forecast), holidays. Counts reconcile exactly with Citi Bike's files. | DuckDB, Parquet |
 | **Warehouse** | Deduplicated trips with proper time zones; station history (SCD2); bikes at every station every minute; detected Lyft van visits; recorder health. | dbt, DuckDB |
 | **Data quality** | 30+ dbt data tests, freshness alerts, known-answer tests on tiny datasets, a daily coverage report, an independent checker on every van plan. | dbt, pytest |
-| **Predictions** | Riders taking and returning bikes per station per hour. Beats 12-month averages by 9–12% on a held-out month; a model is only used if it does. | scikit-learn |
+| **Predictions** | Riders taking and returning bikes per station per hour. Beats 12-month averages by 10–13% in the morning rush on a held-out month. Each training run compares versions and keeps the best; a model is only used if it beats the averages. | scikit-learn |
 | **Planner** | One pickup and up to 4 drop-offs per trip, van capacity, dock limits and drive times on Manhattan's rotated street grid. Solves Midtown (120+ stations) in under a second. | PuLP / CBC |
 | **Verification** | Replays a recorded morning minute by minute under each plan, with hidden demand at empty or full stations. The replay of what actually happened matches the recording exactly. | Python |
 
