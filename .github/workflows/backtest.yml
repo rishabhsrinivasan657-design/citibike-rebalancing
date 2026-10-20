@@ -1,0 +1,36 @@
+# Step 6: replay a recorded morning three ways (what happened, no vans, our plan)
+# and compare riders who'd find no bike or no dock. Results appear on the run's
+# summary page. Start it with:
+#   gh workflow run backtest.yml -f at="2026-10-20 08:00"
+name: backtest
+
+on:
+  workflow_dispatch:
+    inputs:
+      at:
+        description: "Start of the window, New York time (YYYY-MM-DD HH:MM)"
+        required: true
+      zone:
+        description: "Zone"
+        default: "midtown"
+      vans:
+        description: "Number of vans for our plan"
+        default: "3"
+
+permissions:
+  contents: read
+
+jobs:
+  backtest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v5
+      - uses: astral-sh/setup-uv@v6
+      - run: uv sync --frozen --no-dev
+      - run: >-
+          uv run backtest --at "${{ inputs.at }}" --zone "${{ inputs.zone }}"
+          --vans "${{ inputs.vans }}"
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+          HF_HISTORY_REPO: ${{ vars.HF_HISTORY_REPO || 'citibike-history' }}

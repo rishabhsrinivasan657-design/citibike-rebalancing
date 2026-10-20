@@ -35,6 +35,7 @@ coverage-report = "rebalancer.quality.coverage:main"
 backfill = "rebalancer.backfill.cli:main"
 plan-moves = "rebalancer.planner.run:main"
 warehouse = "rebalancer.warehouse:main"
+backtest = "rebalancer.backtest.run:main"
 
 [build-system]
 requires = ["hatchling"]

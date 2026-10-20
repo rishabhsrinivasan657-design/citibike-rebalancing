@@ -217,3 +217,32 @@ transform/  dbt project ── staging (views) ── intermediate ── marts 
 | Deduplication in staging | Trips: one row per `ride_id` (month-end rides appear in two files). Status: overlapping recorder runs write identical rows, so one row per `(station_id, last_reported, state)`, keeping the earliest poll. |
 | Van-move rule (v3, 2026-10-20) | A run of 1–3 consecutive recorded minutes in which a station's total bikes (available + disabled) move the same way. For a loss of *n* bikes, riders would have to take ≥ *n* bikes; for a gain, return ≥ *n*. Using the station's average departures (or arrivals) for that local hour and day type from the Step 2 profile, doubled to allow for an unusually busy day, the chance of that under a Poisson model must be below 0.001, and *n* ≥ 7 (groups of friends rarely rent or return more than 6 together). Stations without a profile are skipped, and so are Jersey City and Hoboken: their trips are published in separate files we don't download, so their profiles look nearly empty. v1 (≥ 6 bikes in ≤ 3 minutes for every station) flagged 139 visits in ~3 hours, several of them plausibly rush-hour riders at busy stations. v2 (*n* ≥ 5, all regions): of 10 hand-checked, 5 clear vans, 4 borderline 5–6-bike changes (possibly groups), 1 wrong (Grove St PATH, Jersey City). Validated against trips once the month's trip file is published. |
 | Freshness: warn 30 min, error 60 min on `poll_log` | Uploads happen every 15 minutes, plus run time; tighter limits would alert on normal operation. |
+
+## Backtest (Step 6): replaying recorded mornings
+
+For a zone and window `[t0, t0 + H)` on a recorded day, per station *s* and minute *t*:
+
+| Quantity | Source |
+|---|---|
+| `b_obs(s,t)` bikes available, `cap(s,t)` = bikes + free docks | `fct_station_minute` |
+| `van(s,t)` change during an inferred Lyft visit | minute changes inside `fct_inferred_rebalancing` windows |
+| `rider(s,t) = b_obs(s,t) − b_obs(s,t−1) − van(s,t)` | derived |
+| hidden departures `ℓ_dep(s,t)` when `b_obs(s,t−1) = 0`; hidden returns `ℓ_arr(s,t)` when no free docks | profile rate / 60 for that station, day type and local hour |
+
+A scenario adds moves `m(s,t)` (pickups negative, at the minute loading finishes;
+drop-offs positive, at the minute unloading finishes) and steps forward:
+
+```
+want = b(s,t−1) + rider(s,t) − ℓ_dep(s,t) + ℓ_arr(s,t) + m(s,t)
+b(s,t) = clip(want, 0, cap(s,t));  missed pickups += max(0, −want);  missed returns += max(0, want − cap)
+```
+
+Scenarios: **actual** (`m = van`), **no vans** (`m = 0`), **our plan** (`m` = planner moves,
+planned from `b_obs(·,t0)` and the profile only). Consistency check: *actual* with
+`ℓ = 0` must reproduce `b_obs` exactly. Fluid (fractional) hidden demand keeps the
+replay deterministic.
+
+Known biases, stated in every report: hidden demand uses 12-month averages, not that
+day's demand; riders turned away at an empty station may go to a neighbour (not
+modelled, which favours rebalancing); van visits under the detection threshold count
+as riders.

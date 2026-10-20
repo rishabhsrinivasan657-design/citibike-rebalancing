@@ -247,28 +247,58 @@ on a weekday.
 - ✅ On that morning, the plan cuts riders who'd find no bike or no dock from
   **75 to 44 (41% fewer)**: no bike 36 → 16, no dock 39 → 28, moving 41 bikes in 6 trips.
 
+**On a real recorded morning (Tue Oct 20, 8:00am bike counts)**
+- The real 8am problem is **full stations**, not empty ones: 144 riders would find
+  no free dock vs 22 with no bike. (The Monday-evening test had suggested the opposite.)
+- The plan cuts riders affected from **165 to 112 (32% fewer)**, mostly by moving
+  101 bikes out of full stations into the large station at Park Ave & E 41 St.
+- Solved in **0.9 s**, proven within 1% of the best possible. The first try took
+  25.1 s, hitting the solver's time limit while still calling itself "Optimal". The
+  model now treats bike counts as smooth (rounded down after) and reports the true status.
+
 **Known limits (to fix in later steps)**
-- The bike counts were whatever the live feed showed when it ran (Monday evening),
-  paired with typical 8am demand. Once the recorder has a real weekday morning,
-  we'll use the 7:45am counts instead.
 - Expected riders are 12-month averages, not predictions. Step 4 replaces them.
 - The vans are under-used (41 bikes in an hour) and "no dock" improves less than
   "no bike". Full stations can only send bikes to the 10 roomiest stations, which
   is a simplification worth revisiting.
 
-## Step 6: Test the plan on past days
-**Status: not started**
+## Step 6: Test the plan on real days (backtest)
+**Status: in progress**
 
-**What it does:** replays real past days minute by minute, as if our vans had been
-out there following the plan, and counts the "no bikes" and "no parking" minutes.
+**What it does:** replays a real recorded morning minute by minute and asks
+"what if?". It compares three versions of the same morning in the same area:
+1. **What actually happened**, with Lyft's own vans.
+2. **No vans at all**, with Lyft's van visits taken out.
+3. **Our plan instead of Lyft's.** Our planner only sees the 8:00am bike counts and
+   typical demand, never what happens next. Its moves are then played into the real
+   morning.
 
-It also has to account for this: when a station is empty, nobody can take a bike,
-so the data shows zero demand even though people wanted bikes. We estimate that
-hidden demand from normal days.
+For each version it counts riders who'd find **no bike** or **no free dock**.
+
+**How the replay works:**
+- Rider activity at each station each minute = the real change in bikes we recorded,
+  minus any van visit (Step 3).
+- **Hidden demand:** when a station was actually empty, people who wanted a bike left
+  no trace. While a station was empty (or full), we add the usual number of riders for
+  that station and time (from the 12-month averages). If our plan keeps the station
+  stocked, those riders get served.
+- A station can't go below zero bikes or above its number of docks. Anything beyond
+  that counts as a rider who missed out.
+
+**Why not wait for real trip records?** October's trips won't be published until
+mid-November. Our own minute-by-minute recordings let us test now, and the trip
+records can confirm the results later.
 
 **Checks**
-- ⬜ With no vans, the replay matches what really happened.
-- ⬜ A results report comparing three cases: no vans, Lyft's real moves, our plan.
+- ⬜ Replaying "what actually happened" without the hidden demand reproduces the
+  recorded bike counts exactly, minute by minute.
+- ⬜ Hand-built cases behave correctly (empty and full limits, van moves, hidden demand).
+- ⬜ A results table for this morning (Tue Oct 20, 8–9am, Midtown) comparing the
+  three versions, with the assumptions written next to it.
+
+**Known limits:** one morning is an anecdote, not evidence. The real verdict needs
+at least 10 weekday mornings (about 2 weeks of recording), plus predictions from
+Step 4 instead of averages.
 
 ---
 
