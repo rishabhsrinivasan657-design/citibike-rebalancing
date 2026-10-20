@@ -17,12 +17,24 @@ import numpy as np
 import pyarrow.parquet as pq
 
 from rebalancer.backfill.weather import CENTRAL_PARK
-from rebalancer.forecast.train import FEATURES
+from rebalancer.forecast.train import FEATURES, NYC_LAT, approved
 
 LIVE_URL = "https://api.open-meteo.com/v1/forecast"
 ARCHIVE_URL = "https://historical-forecast-api.open-meteo.com/v1/forecast"
 
 Weather = dict[datetime, tuple[float, float, float, float]]  # UTC hour -> temp, precip, snow, wind
+
+
+class ModelNotApproved(Exception):
+    """The saved model didn't beat the averages on its test month."""
+
+
+def daylight_hours(day: date) -> float:
+    """Same formula as train.DAYLIGHT_SQL."""
+    import math
+
+    decl = math.radians(23.44 * math.sin(2 * math.pi * (284 + day.timetuple().tm_yday) / 365))
+    return 24 / math.pi * math.acos(-math.tan(math.radians(NYC_LAT)) * math.tan(decl))
 
 
 def fetch_weather(client: httpx.Client, day: date) -> Weather:
@@ -70,7 +82,10 @@ class DemandModel:
             (r["short_name"], r["day_type"], r["hour"]): (r["avg_departures"], r["avg_arrivals"])
             for r in rows
         }
-        return cls(joblib.load(model_path), profile)
+        bundle = joblib.load(model_path)
+        if not bundle.get("approved") or not approved(bundle.get("metrics", {})):
+            raise ModelNotApproved("the saved demand model didn't beat the averages")
+        return cls(bundle, profile)
 
     def hourly(
         self, short_names: list[str], start_local: datetime, hours: int, weather: Weather
@@ -96,7 +111,7 @@ class DemandModel:
                     "hour": t.hour,
                     "dow": dow,
                     "is_holiday": int(hol),
-                    "month": t.month,
+                    "daylight_hours": daylight_hours(t.date()),
                     "temp_c": temp,
                     "precip_mm": precip,
                     "snow_cm": snow,
@@ -105,8 +120,10 @@ class DemandModel:
                 rows.append([values[f] for f in FEATURES])
                 keys.append((sn, t.hour))
         x = np.array(rows, dtype=float)
-        dep = self.bundle["departures"].predict(x)
-        arr = self.bundle["arrivals"].predict(x)
+        # Safety net: never predict more than 1.5x the busiest station-hour ever seen.
+        cap = 1.5 * self.bundle["max_target"]
+        dep = np.clip(self.bundle["departures"].predict(x), 0, cap)
+        arr = np.clip(self.bundle["arrivals"].predict(x), 0, cap)
         out: dict[str, dict[int, tuple[float, float]]] = {}
         for (sn, hour), d, a in zip(keys, dep, arr, strict=True):
             out.setdefault(sn, {})[hour] = (float(d), float(a))

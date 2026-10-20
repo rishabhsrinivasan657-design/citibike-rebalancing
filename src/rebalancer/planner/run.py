@@ -57,12 +57,16 @@ def build_instance(
     start: datetime,
     day_type: str,
     params: Params,
+    rates: dict[str, dict[int, tuple[float, float]]] | None = None,
 ) -> Instance:
+    """`rates` (short_name -> local hour -> (departures, arrivals)) overrides the
+    profile averages, e.g. with the Step 4 demand model's predictions."""
     centre, radius = ZONES[zone]
-    rates: dict[str, dict[int, tuple[float, float]]] = {}
-    for r in profile_rows:
-        if r["day_type"] == day_type:
-            rates.setdefault(r["station_id"], {})[r["hour"]] = (r["departures"], r["arrivals"])
+    if rates is None:
+        rates = {}
+        for r in profile_rows:
+            if r["day_type"] == day_type:
+                rates.setdefault(r["station_id"], {})[r["hour"]] = (r["departures"], r["arrivals"])
     live = {s.station_id: s for s in status}
     stations = []
     for s in info:
@@ -160,6 +164,27 @@ def hub_file(path_in_repo: str) -> Path:
         HfApi(token=token), os.environ.get("HF_HISTORY_REPO", "citibike-history"), False
     )
     return Path(hf_hub_download(repo, path_in_repo, repo_type="dataset", token=token))
+
+
+def predicted_rates(
+    info: list[StationInformation],
+    start: datetime,
+    minutes: float,
+    model_path: Path | None = None,
+    profile_features_path: Path | None = None,
+) -> dict[str, dict[int, tuple[float, float]]]:
+    """Step 4 predictions for every station, for the hours the plan covers."""
+    from rebalancer.forecast.predict import DemandModel, fetch_weather
+
+    model = DemandModel.load(
+        model_path or hub_file("models/demand.joblib"),
+        profile_features_path or hub_file("models/profile_features.parquet"),
+    )
+    with httpx.Client(timeout=30) as client:
+        weather = fetch_weather(client, start.date())
+    hours = int((start.minute + minutes) // 60) + 1
+    names = sorted({i.short_name for i in info if i.short_name})
+    return model.hourly(names, start, hours, weather)
 
 
 def load_profile(path: Path | None) -> list[dict]:
@@ -264,6 +289,12 @@ def main() -> None:
     parser.add_argument("--station-table", type=Path, help="local dim_station.parquet")
     parser.add_argument("--save-instance", type=Path, help="write the planning problem as JSON")
     parser.add_argument("--instance", type=Path, help="plan a saved problem instead")
+    parser.add_argument(
+        "--demand",
+        choices=["model", "averages"],
+        default="model",
+        help="expected riders from the Step 4 model or 12-month averages",
+    )
     args = parser.parse_args()
     logging.basicConfig(level=logging.WARNING)
 
@@ -301,9 +332,25 @@ def main() -> None:
         status_list = parse_feed(status.payload, StationStatus).stations
         source = "from the live feed when this ran"
 
+    rates = None
+    if args.demand == "model":
+        from rebalancer.forecast.predict import ModelNotApproved
+
+        try:
+            rates = predicted_rates(info_list, start, args.minutes)
+        except ModelNotApproved:
+            source += "; the demand model isn't approved, so averages were used"
     inst = build_instance(
-        load_profile(args.profile), info_list, status_list, args.zone, start, day_type, params
+        load_profile(args.profile),
+        info_list,
+        status_list,
+        args.zone,
+        start,
+        day_type,
+        params,
+        rates,
     )
+    source += "; expected riders from the Step 4 model" if rates else ""
     if args.save_instance:
         save_instance(inst, start, source, args.save_instance)
     report = render(inst, plan(inst), start, source)

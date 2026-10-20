@@ -27,6 +27,7 @@ from rebalancer.planner.run import (
     build_instance,
     hub_file,
     load_profile,
+    predicted_rates,
     recorded_snapshot,
 )
 from rebalancer.planner.schedule import plan as make_plan
@@ -42,7 +43,7 @@ def day_type_of(day: datetime) -> str:
 def render(
     rep: Replay,
     outcomes: dict[str, Outcome],
-    our_plan: Plan,
+    plans: dict[str, Plan],
     lyft_moves: tuple[int, int],
     replay_error: float,
     zone: str,
@@ -53,19 +54,22 @@ def render(
         f"## Backtest: {zone.title()}, {rep.start_local:%a %b %d}, "
         f"{rep.start_local:%H:%M}–{end:%H:%M} (New York time)",
         "",
-        f"{len(rep.stations)} stations. Our plan was made from the {rep.start_local:%H:%M} "
-        "bike counts and 12-month averages only; it never saw what happened next.",
+        f"{len(rep.stations)} stations. Our plans were made from the {rep.start_local:%H:%M} "
+        "bike counts plus either 12-month averages or the Step 4 predictions (forecast weather "
+        "only); they never saw what happened next. Hidden demand in the replay always uses "
+        "the averages, so the predictions don't grade themselves.",
         "",
         "| Version | No bike | No free dock | Riders affected | vs no vans "
         "| Bikes dropped off / picked up |",
         "|---|---|---|---|---|---|",
     ]
-    ours_moved = sum(m.bikes for m in our_plan.moves)
     moved = {
         "What actually happened (Lyft's vans)": f"{lyft_moves[0]} / {lyft_moves[1]}",
         "No vans at all": "0 / 0",
-        "Our plan instead of Lyft's": f"{ours_moved} / {ours_moved}",
     }
+    for name, p in plans.items():
+        n = sum(m.bikes for m in p.moves)
+        moved[name] = f"{n} / {n}"
     for name, o in outcomes.items():
         change = f"{(base - o.riders_affected) / base:.0%} fewer" if base else "–"
         if name == "No vans at all":
@@ -74,7 +78,7 @@ def render(
             f"| {name} | {o.missed_pickups:.0f} | {o.missed_returns:.0f} | "
             f"**{o.riders_affected:.0f}** | {change} | {moved[name]} |"
         )
-    ours = outcomes["Our plan instead of Lyft's"]
+    shortfall = max(outcomes[name].van_shortfall for name in plans) if plans else 0
     lines += [
         "",
         "**Checks**",
@@ -82,7 +86,7 @@ def render(
         f"bike counts: largest difference **{replay_error:.0f} bikes** (must be 0).",
         f"- Recorder gaps in this window: {rep.recorder_gaps} minutes.",
         f"- Planned bikes our vans couldn't load or unload when they got there: "
-        f"{ours.van_shortfall:.0f}.",
+        f"{shortfall:.0f} at most.",
         "",
         "**Assumptions** (read before trusting the numbers)",
         "- Rider activity is the recorded change in bikes minus Lyft's detected van visits.",
@@ -106,6 +110,12 @@ def main() -> None:
     parser.add_argument("--station-table", type=Path)
     parser.add_argument("--visits-table", type=Path)
     parser.add_argument("--profile", type=Path)
+    parser.add_argument(
+        "--demand",
+        choices=["model", "averages", "both"],
+        default="both",
+        help="what our planner expects: Step 4 predictions, averages, or both",
+    )
     args = parser.parse_args()
 
     start = datetime.strptime(args.at, "%Y-%m-%d %H:%M")
@@ -117,10 +127,21 @@ def main() -> None:
 
     info, status = recorded_snapshot(minute_path, station_path, start)
     params = Params(vans=args.vans, horizon_min=float(args.minutes))
-    inst = build_instance(
-        load_profile(profile_path), info, status, args.zone, start, day_type, params
-    )
-    our_plan = make_plan(inst)
+    profile_rows = load_profile(profile_path)
+    plans = {}
+    if args.demand in ("averages", "both"):
+        inst = build_instance(profile_rows, info, status, args.zone, start, day_type, params)
+        plans["Our plan (planned with averages)"] = make_plan(inst)
+    if args.demand in ("model", "both"):
+        from rebalancer.forecast.predict import ModelNotApproved
+
+        try:
+            rates = predicted_rates(info, start, float(args.minutes))
+        except ModelNotApproved:
+            rates = None
+    if args.demand in ("model", "both") and rates is not None:
+        inst = build_instance(profile_rows, info, status, args.zone, start, day_type, params, rates)
+        plans["Our plan (planned with predictions)"] = make_plan(inst)
 
     by_id = {i.station_id: i for i in info}
     ids = [s.id for s in inst.stations]
@@ -138,13 +159,14 @@ def main() -> None:
     outcomes = {
         "What actually happened (Lyft's vans)": simulate(rep, rep.van),
         "No vans at all": simulate(rep, None),
-        "Our plan instead of Lyft's": simulate(rep, moves_from_plan(rep, our_plan.moves)),
     }
+    for name, p in plans.items():
+        outcomes[name] = simulate(rep, moves_from_plan(rep, p.moves))
     lyft_moves = (
         sum(v for s in rep.stations for v in rep.van[s] if v > 0),
         -sum(v for s in rep.stations for v in rep.van[s] if v < 0),
     )
-    report = render(rep, outcomes, our_plan, lyft_moves, max_replay_error(rep), args.zone)
+    report = render(rep, outcomes, plans, lyft_moves, max_replay_error(rep), args.zone)
     print(report)
     if summary := os.environ.get("GITHUB_STEP_SUMMARY"):
         with open(summary, "a") as f:

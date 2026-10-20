@@ -28,12 +28,20 @@ FEATURES = [
     "hour",
     "dow",
     "is_holiday",
-    "month",
+    "daylight_hours",
     "temp_c",
     "precip_mm",
     "snow_cm",
     "wind_kmh",
 ]
+NYC_LAT = 40.78
+# Daylight hours from the day of year (standard declination approximation). Used
+# instead of month: the test month (September) never appears in training, but its
+# daylight does (it matches early April).
+DAYLIGHT_SQL = (
+    f"24 / pi() * acos(-tan(radians({NYC_LAT})) * tan(radians(23.44 * sin(2 * pi() * "
+    "(284 + dayofyear({col})) / 365))))"
+)
 TRAIN_END = "2026-08-01"  # train before this; August validates; September tests
 TEST_START, TEST_END = "2026-09-01", "2026-10-01"
 
@@ -81,7 +89,7 @@ def build_table(con, raw: Path) -> None:
             hour(g.hour_local) AS hour,
             dayofweek(g.hour_local) AS dow,
             (g.hour_local::DATE IN (SELECT date FROM hol))::INT AS is_holiday,
-            month(g.hour_local) AS month,
+            {DAYLIGHT_SQL.format(col="g.hour_local")} AS daylight_hours,
             CASE WHEN dayofweek(g.hour_local) IN (0, 6)
                       OR g.hour_local::DATE IN (SELECT date FROM hol)
                  THEN 'weekend' ELSE 'weekday' END AS day_type,
@@ -120,18 +128,36 @@ def matrix(con, profile_table: str, where: str, sample: int | None = None):
     return x, data["departures"], data["arrivals"], data["rush"].astype(bool)
 
 
+MODEL_PARAMS = {
+    "loss": "poisson",
+    "max_iter": 500,
+    "learning_rate": 0.05,
+    "max_leaf_nodes": 31,
+    "min_samples_leaf": 200,
+    "l2_regularization": 10.0,
+    "early_stopping": True,
+    "validation_fraction": 0.1,
+    "n_iter_no_change": 25,
+    "random_state": 7,
+}
+
+
 def fit(x: np.ndarray, y: np.ndarray) -> HistGradientBoostingRegressor:
-    model = HistGradientBoostingRegressor(
-        loss="poisson",
-        max_iter=400,
-        learning_rate=0.1,
-        max_leaf_nodes=63,
-        early_stopping=True,
-        validation_fraction=0.1,
-        n_iter_no_change=20,
-        random_state=7,
+    # Poisson boosting is unstable on zero-heavy counts without regularisation: rows
+    # predicted near zero have near-zero curvature, so a later leaf mixing them with
+    # positive counts can take an enormous step (the first run predicted ~1e71).
+    # l2_regularization and large leaves bound those steps.
+    return HistGradientBoostingRegressor(**MODEL_PARAMS).fit(x, y)
+
+
+def approved(metrics: dict) -> bool:
+    """A model may be used only if it beats the averages on the test month, overall and
+    in the morning rush, for both pickups and returns."""
+    return bool(metrics) and all(
+        r["model"]["mae"] < r["averages"]["mae"]
+        and r["model_rush"]["mae"] < r["averages_rush"]["mae"]
+        for r in metrics.values()
     )
-    return model.fit(x, y)
 
 
 def scores(y: np.ndarray, pred: np.ndarray) -> dict[str, float]:
@@ -142,7 +168,9 @@ def scores(y: np.ndarray, pred: np.ndarray) -> dict[str, float]:
 
 
 def evaluate(con, sample: int) -> tuple[dict, str]:
-    con.execute(f"CREATE TABLE profile_train AS {profile_sql(f"hour_local < '{TRAIN_END}'")}")
+    con.execute(
+        f"CREATE OR REPLACE TABLE profile_train AS {profile_sql(f"hour_local < '{TRAIN_END}'")}"
+    )
     x_tr, dep_tr, arr_tr, _ = matrix(con, "profile_train", f"hour_local < '{TRAIN_END}'", sample)
     test_where = f"hour_local >= '{TEST_START}' AND hour_local < '{TEST_END}'"
     x_te, dep_te, arr_te, rush = matrix(con, "profile_train", test_where)
@@ -156,6 +184,9 @@ def evaluate(con, sample: int) -> tuple[dict, str]:
         pred = model.predict(x_te)
         base = x_te[:, base_col[target]]
         results[target] = {
+            "mean_actual": float(y_te.mean()),
+            "mean_predicted": float(pred.mean()),
+            "max_predicted": float(pred.max()),
             "model": scores(y_te, pred),
             "averages": scores(y_te, base),
             "model_rush": scores(y_te[rush], pred[rush]),
@@ -187,12 +218,31 @@ def render(results: dict, train_rows: int) -> str:
                 f"| {target} | {label} | {b['mae']:.3f} | {m['mae']:.3f} | {verdict} "
                 f"| {b['poisson_deviance']:.3f} | {m['poisson_deviance']:.3f} |"
             )
+    lines += [
+        "",
+        "| Predicting | Mean actual | Mean predicted | Largest prediction |",
+        "|---|---|---|---|",
+    ]
+    for target, r in results.items():
+        lines.append(
+            f"| {target} | {r['mean_actual']:.3f} | {r['mean_predicted']:.3f} "
+            f"| {r['max_predicted']:.1f} |"
+        )
+    verdict = (
+        "**Approved**: beats the averages."
+        if approved(results)
+        else (
+            "**Not approved**: doesn't beat the averages everywhere, so the planner keeps "
+            "using averages."
+        )
+    )
+    lines += ["", verdict]
     return "\n".join(lines)
 
 
 def train_production(con, out: Path, sample: int, metrics: dict) -> None:
     """Refit on all 12 months with the full-year averages, for live use."""
-    con.execute(f"CREATE TABLE profile_all AS {profile_sql('true')}")
+    con.execute(f"CREATE OR REPLACE TABLE profile_all AS {profile_sql('true')}")
     x, dep, arr, _ = matrix(con, "profile_all", "true", sample)
     bundle = {
         "departures": fit(x, dep),
@@ -200,6 +250,8 @@ def train_production(con, out: Path, sample: int, metrics: dict) -> None:
         "features": FEATURES,
         "trained_at": datetime.now(UTC).isoformat(timespec="seconds"),
         "metrics": metrics,
+        "approved": approved(metrics),
+        "max_target": float(max(dep.max(), arr.max())),
     }
     out.mkdir(parents=True, exist_ok=True)
     joblib.dump(bundle, out / "demand.joblib", compress=3)
@@ -219,12 +271,14 @@ def main() -> None:
     build_table(con, args.raw)
     metrics, report = evaluate(con, args.sample)
     print(report)
-    train_production(con, args.out, args.sample, metrics)
-    (args.out / "metrics.md").write_text(report + "\n")
-    (args.out / "metrics.json").write_text(json.dumps(metrics, indent=2))
     if summary := os.environ.get("GITHUB_STEP_SUMMARY"):
         with open(summary, "a") as f:
             f.write(report + "\n")
+    if not approved(metrics):
+        raise SystemExit("model not approved: it doesn't beat the averages; nothing saved")
+    train_production(con, args.out, args.sample, metrics)
+    (args.out / "metrics.md").write_text(report + "\n")
+    (args.out / "metrics.json").write_text(json.dumps(metrics, indent=2))
 
 
 if __name__ == "__main__":

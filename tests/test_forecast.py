@@ -75,6 +75,16 @@ def raw(tmp_path_factory):
     return raw
 
 
+@pytest.fixture(autouse=True, scope="module")
+def small_leaves():
+    # The tiny test data has ~60 rows per hour of day; production needs 200 per leaf.
+    saved = dict(train.MODEL_PARAMS)
+    train.MODEL_PARAMS.update(min_samples_leaf=5)
+    yield
+    train.MODEL_PARAMS.clear()
+    train.MODEL_PARAMS.update(saved)
+
+
 @pytest.fixture(scope="module")
 def con(raw):
     c = db.connect()
@@ -108,10 +118,41 @@ def test_model_beats_averages_when_weather_matters(con):
 
 
 def test_saved_model_predicts_less_riding_in_the_rain(con, tmp_path):
-    train.train_production(con, tmp_path, 10_000_000, metrics={})
+    metrics, _ = train.evaluate(con, sample=10_000_000)
+    assert train.approved(metrics)
+    train.train_production(con, tmp_path, 10_000_000, metrics)
     model = DemandModel.load(tmp_path / "demand.joblib", tmp_path / "profile_features.parquet")
     start = datetime(2026, 9, 15, 8, 0)  # a Tuesday
     utc8 = start.replace(tzinfo=NY).astimezone(UTC)
     dry = model.hourly(["1.01"], start, 0, {utc8: (20.0, 0.0, 0.0, 10.0)})["1.01"][8][0]
     wet = model.hourly(["1.01"], start, 0, {utc8: (20.0, 3.0, 0.0, 10.0)})["1.01"][8][0]
     assert dry > 6 and wet < 4
+
+
+def test_unapproved_model_is_refused(con, tmp_path):
+    from rebalancer.forecast.predict import ModelNotApproved
+
+    worse = {
+        "departures": {
+            "model": {"mae": 2.0},
+            "averages": {"mae": 1.5},
+            "model_rush": {"mae": 2.0},
+            "averages_rush": {"mae": 1.5},
+        }
+    }
+    assert not train.approved(worse) and not train.approved({})
+    train.train_production(con, tmp_path, 10_000_000, worse)
+    with pytest.raises(ModelNotApproved):
+        DemandModel.load(tmp_path / "demand.joblib", tmp_path / "profile_features.parquet")
+
+
+def test_daylight_matches_between_training_sql_and_live_python():
+    from rebalancer.forecast.predict import daylight_hours
+
+    sql = train.DAYLIGHT_SQL.format(col="DATE '2026-06-21'")
+    (from_sql,) = db.connect().execute(f"SELECT {sql}").fetchone()
+    assert from_sql == pytest.approx(daylight_hours(date(2026, 6, 21)))
+    assert 14.5 < from_sql < 15.5  # NYC midsummer
+    assert daylight_hours(date(2026, 9, 15)) == pytest.approx(
+        daylight_hours(date(2026, 3, 28)), abs=0.2
+    )  # September looks like spring: seen in training
