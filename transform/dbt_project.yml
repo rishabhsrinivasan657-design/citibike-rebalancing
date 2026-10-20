@@ -1,0 +1,19 @@
+name: citibike
+version: "1.0.0"
+config-version: 2
+profile: citibike
+
+model-paths: ["models"]
+test-paths: ["tests"]
+target-path: "target"
+clean-targets: ["target", "dbt_packages"]
+
+models:
+  citibike:
+    staging:
+      +materialized: view
+    intermediate:
+      +materialized: table
+    marts:
+      +materialized: external
+      +format: parquet

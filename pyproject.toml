@@ -22,6 +22,10 @@ dev = [
     "respx>=0.21",
     "ruff>=0.6",
 ]
+transform = [
+    "dbt-core>=1.9,<1.11",
+    "dbt-duckdb>=1.9,<1.11",
+]
 
 [project.scripts]
 collector = "rebalancer.ingest.collector:main"
@@ -30,6 +34,7 @@ recorder = "rebalancer.ingest.recorder:main"
 coverage-report = "rebalancer.quality.coverage:main"
 backfill = "rebalancer.backfill.cli:main"
 plan-moves = "rebalancer.planner.run:main"
+warehouse = "rebalancer.warehouse:main"
 
 [build-system]
 requires = ["hatchling"]
@@ -50,5 +55,6 @@ testpaths = ["tests"]
 markers = [
     "live: hits the real Citi Bike GBFS feed",
     "integration: needs the docker compose stack running",
+    "dbt: builds the dbt project on a tiny dataset (needs the transform group)",
 ]
-addopts = "-m 'not live and not integration'"
+addopts = "-m 'not live and not integration and not dbt'"

@@ -1,4 +1,4 @@
-.PHONY: install lint fmt test test-live test-integration up down logs
+.PHONY: install lint fmt test test-live test-integration test-dbt up down logs
 
 install:
 	uv sync
@@ -29,3 +29,6 @@ down:
 logs:
 	docker compose logs -f collector lake-sink
 
+
+test-dbt:
+	uv run --group transform pytest -m dbt

@@ -59,7 +59,10 @@ ourselves. Every day we're not recording is data we can never get back.
 - ✅ If uploading fails, the files are kept and sent again later (tested).
 - ✅ Switched on: a test run on GitHub uploaded to Hugging Face (Oct 19, 2026).
 
-**Problems found while testing (both fixed)**
+**Problems found while testing (all fixed)**
+0. GitHub's scheduler skipped two runs on the first evening (Oct 19), leaving an
+   80-minute gap (7:43–9:05pm New York time). Each run now starts the next one
+   itself, 15 minutes before it ends; the schedule is only a backup.
 1. The saving part sometimes started before it was ready to read data, got
    confused, and crashed. It now gets everything ready when it starts.
 2. Most stations re-send the same numbers every minute even when nothing changed,
@@ -110,23 +113,43 @@ any time: months already saved are skipped unless Citi Bike changes the file.
 - ✅ Holidays include the obvious ones (46 holidays, 2025–2027).
 
 ## Step 3: Organise the data into clean tables
-**Status: not started**
+**Status: in progress**
 
-**What it does:** turns the raw saved files into clean, tidy tables that are easy
-to use. The most important ones:
-- **Bikes at every station, every minute** (filling in the gaps between readings).
-- **Moves made by Lyft's crews.** If a station suddenly gains 15 bikes and no trips
-  explain it, a van must have dropped them off. This lets us compare our plan
-  with what Lyft really did.
+**What it does:** turns the raw files into clean, tidy tables that the later steps
+read from, using **dbt** (a standard tool for building and testing data tables
+with SQL). It runs on GitHub, not your laptop, and saves the finished tables to
+the `citibike-history` dataset on Hugging Face.
 
-It also adds automatic data checks, and an alert if the data stops arriving.
+**The tables**
+- **Trips:** every ride once (month-end duplicates removed), with times in
+  proper New York time, ride length, and the station each ride used.
+- **Station history:** every version of every station, such as when one moved,
+  changed size, or was renamed. Each version has "valid from" and "valid to"
+  times. (This is called a "slowly changing dimension", or SCD2.)
+- **Bikes at every station, every minute:** filling the gaps between readings,
+  and marking minutes when the recorder was down or a station stopped reporting.
+- **Lyft's van moves:** a station that gains or loses 6+ bikes within 2 minutes is
+  almost certainly a van, not riders. This lets us compare our plan with Lyft's.
+- **Recording health:** one row per minute saying whether we have data.
+
+**Automatic checks** run every time the tables are built: no duplicate rides,
+no missing IDs, bikes never below zero or above a station's size, every trip's
+station exists in the station history, and so on. A **freshness check** warns
+if the newest live data is more than 30 minutes old and fails at 60. (Data is
+uploaded every 15 minutes, so a tighter limit would raise false alarms.)
+
+**Lineage:** dbt draws a diagram of which table is built from which.
 
 **Checks**
-- ⬜ All the automatic data checks pass.
-- ⬜ Alert if the newest data is more than 15 minutes old.
-- ⬜ 10 detected Lyft van moves checked by hand to confirm they're real.
+- ⬜ All the automatic data checks pass on the real data.
+- ⬜ The freshness check passes.
+- ⬜ The minute table's bike counts match the raw readings at the moments they
+  were taken.
+- ⬜ 10 detected van moves checked by hand against the raw readings.
 
----
+**Known limit:** the trips for October 2026 won't be published until about
+mid-November, so for now van moves are detected from the size of the jump
+alone. When those trips arrive, we can confirm that no riders explain them.
 
 ## Step 4: Predict empty and full stations
 **Status: not started**

@@ -1,0 +1,11 @@
+citibike:
+  target: local
+  outputs:
+    local:
+      type: duckdb
+      path: "{{ env_var('DBT_DUCKDB_PATH', 'target/warehouse.duckdb') }}"
+      threads: "{{ env_var('DUCKDB_THREADS', '2') | int }}"
+      settings:
+        memory_limit: "{{ env_var('DUCKDB_MEMORY_LIMIT', '1GB') }}"
+        TimeZone: UTC
+        preserve_insertion_order: false

@@ -195,3 +195,25 @@ days with zero trips. Month-end duplicate rides are removed first. Stored as
 ### Score
 "Problem bikes" = Σ (short + over) using the moves actually scheduled, compared
 with doing nothing. Weighted by urgency for the objective, reported unweighted.
+
+## Warehouse (Step 3): dbt on DuckDB
+
+```
+work/raw/   (history dataset: trips, weather, holidays)  ─┐
+work/lake/  (live dataset: station_status, station_information, poll_log) ─┤
+                                                           ▼
+transform/  dbt project ── staging (views) ── intermediate ── marts (Parquet)
+                                                           │
+                         pushed to the history dataset as marts/<model>/...
+```
+
+| Choice | Why |
+|---|---|
+| dbt + DuckDB, run on GitHub Actions | Same SQL would run on Snowflake by changing the profile; DuckDB is free and fast on a 16 GB runner. Nothing heavy runs on a laptop. |
+| GitHub Actions instead of Airflow | Three scheduled jobs don't justify running an Airflow server. The workflows play the orchestrator role; an Airflow DAG could wrap the same commands later. |
+| SCD2 built from the event log, not `dbt snapshot` | `dbt snapshot` needs the previous snapshot table to persist between runs, and GitHub runners are thrown away after each run. The live feed's `station_information` log already holds every version, so `dim_station` derives `valid_from`/`valid_to` with window functions. It's fully rebuildable and gives the same result. |
+| Full rebuilds for now | At current sizes a full rebuild takes minutes. `fct_station_minute` grows ~3.6M rows/day; when rebuilds get slow it becomes an incremental model with the DuckDB file persisted between runs. |
+| Marts written as Parquet (`materialized: external`) | Steps 4 and 6 read them straight from Hugging Face without dbt. Trips are partitioned by month. |
+| Deduplication in staging | Trips: one row per `ride_id` (month-end rides appear in two files). Status: overlapping recorder runs write identical rows, so one row per `(station_id, last_reported, state)`, keeping the earliest poll. |
+| Van-move heuristic | A change in total bikes (available + disabled) of ≥ 6 between consecutive reports ≤ 2 minutes apart. Riders rarely dock or take 6 bikes at one station within 2 minutes. Validated against trips once the month's trip file is published. |
+| Freshness: warn 30 min, error 60 min on `poll_log` | Uploads happen every 15 minutes, plus run time; tighter limits would alert on normal operation. |

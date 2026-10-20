@@ -1,0 +1,51 @@
+# Step 3: build the clean tables with dbt from the history and live datasets,
+# run every data test and the freshness check, and save the tables (marts) to the
+# history dataset. Runs every 6 hours, or by hand:
+#   gh workflow run transform.yml
+name: transform
+
+on:
+  schedule:
+    - cron: "45 */6 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  HF_TOKEN: ${{ secrets.HF_TOKEN }}
+  HF_REPO: ${{ vars.HF_REPO || 'citibike-station-status' }}
+  HF_HISTORY_REPO: ${{ vars.HF_HISTORY_REPO || 'citibike-history' }}
+  RAW_ROOT: ${{ github.workspace }}/work/raw
+  LAKE_ROOT: ${{ github.workspace }}/work/lake
+  MARTS_ROOT: ${{ github.workspace }}/work/marts
+  DBT_PROFILES_DIR: ${{ github.workspace }}/transform
+  DBT_DUCKDB_PATH: ${{ github.workspace }}/work/warehouse.duckdb
+  DUCKDB_MEMORY_LIMIT: 10GB
+  DUCKDB_THREADS: "4"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v5
+      - uses: astral-sh/setup-uv@v6
+      - run: uv sync --frozen --no-dev --group transform
+      - name: Download raw data
+        run: uv run warehouse pull --work work && mkdir -p work/marts
+      - name: Build tables and run data tests
+        run: uv run dbt build --project-dir transform
+      - name: Freshness check on live data
+        run: uv run dbt source freshness --project-dir transform
+      - name: Lineage docs
+        run: uv run dbt docs generate --project-dir transform --static
+      - name: Save tables to Hugging Face
+        run: uv run warehouse push --work work
+      - name: Summary
+        run: uv run warehouse report --work work
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dbt-docs
+          path: transform/target/static_index.html
+          retention-days: 30

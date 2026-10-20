@@ -1,0 +1,37 @@
+version: 2
+
+sources:
+  - name: history
+    description: "Step 2 downloads (Hugging Face dataset citibike-history, raw/)."
+    meta:
+      external_location: "read_parquet('{{ env_var('RAW_ROOT') }}/{name}', hive_partitioning = true, union_by_name = true)"
+    tables:
+      - name: trips
+        description: "Citi Bike trip files, one Parquet per month, as published."
+        meta:
+          external_location: "read_parquet('{{ env_var('RAW_ROOT') }}/trips/month=*/trips.parquet', hive_partitioning = true)"
+      - name: weather_observed
+        meta:
+          external_location: "read_parquet('{{ env_var('RAW_ROOT') }}/weather/observed.parquet')"
+      - name: weather_forecast
+        meta:
+          external_location: "read_parquet('{{ env_var('RAW_ROOT') }}/weather/forecast.parquet')"
+      - name: holidays
+        meta:
+          external_location: "read_parquet('{{ env_var('RAW_ROOT') }}/holidays/holidays.parquet')"
+
+  - name: live
+    description: "Step 1 recorder output (Hugging Face dataset citibike-station-status, lake/)."
+    meta:
+      external_location: "read_parquet('{{ env_var('LAKE_ROOT') }}/{name}/date=*/hour=*/*.parquet', hive_partitioning = true, union_by_name = true)"
+    tables:
+      - name: station_status
+        description: "Changed stations per poll, plus a 15-minute heartbeat per station."
+      - name: station_information
+        description: "Full station list, published when it changes and at least daily."
+      - name: poll_log
+        description: "One row per poll attempt; the recorder's health log."
+        loaded_at_field: polled_at
+        freshness:
+          warn_after: {count: 30, period: minute}
+          error_after: {count: 60, period: minute}

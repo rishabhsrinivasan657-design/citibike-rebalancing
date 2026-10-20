@@ -1,0 +1,82 @@
+version: 2
+
+models:
+  - name: stg_trips
+    columns:
+      - name: ride_id
+        tests: [unique, not_null]
+      - name: started_at_local
+        tests: [not_null]
+      - name: member_casual
+        tests:
+          - accepted_values: {values: [member, casual]}
+      - name: rideable_type
+        tests:
+          - accepted_values:
+              values: [classic_bike, electric_bike]
+              config: {severity: warn}
+
+  - name: stg_station_status
+    columns:
+      - name: station_id
+        tests: [not_null]
+      - name: polled_at
+        tests: [not_null]
+
+  - name: stg_weather
+    columns:
+      - name: hour_utc
+        tests: [unique, not_null]
+
+  - name: int_recorder_minute
+    columns:
+      - name: minute
+        tests: [unique, not_null]
+
+  - name: dim_station
+    description: "Station history (SCD2). One row per station version."
+    columns:
+      - name: station_id
+        tests: [not_null]
+      - name: valid_from
+        tests: [not_null]
+      - name: capacity
+        tests:
+          - within_range: {min_value: 0}
+
+  - name: fct_trips
+    description: "Every ride once, with local and UTC times and GBFS station IDs."
+    columns:
+      - name: ride_id
+        tests: [unique, not_null]
+      - name: start_station_id
+        description: "Null when the station was removed before recording began (~1.6%)."
+        tests:
+          - relationships:
+              to: ref('dim_station')
+              field: station_id
+              config: {where: "start_station_id is not null"}
+
+  - name: fct_station_minute
+    description: "Bikes and docks at every station for every recorded minute."
+    columns:
+      - name: station_id
+        tests: [not_null]
+      - name: minute
+        tests: [not_null]
+      - name: num_bikes_available
+        tests:
+          - not_null
+          - within_range: {min_value: 0}
+      - name: num_docks_available
+        tests:
+          - within_range: {min_value: 0}
+
+  - name: fct_inferred_rebalancing
+    description: "Likely Lyft van visits detected from sudden jumps in bike counts."
+    columns:
+      - name: bikes_change
+        tests: [not_null]
+      - name: action
+        tests:
+          - accepted_values: {values: [drop_off, pick_up]}
