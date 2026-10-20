@@ -135,3 +135,46 @@ def test_load_reads_tables_assigns_van_minutes_and_hourly_rates(tmp_path):
     assert rep.hidden_dep["a"][1] == pytest.approx(1.0) and rep.hidden_arr["a"][1] == 0.5
     assert rep.recorder_gaps == 1
     assert max_replay_error(rep) == 0
+
+
+def test_only_complete_weekday_mornings_are_verified(tmp_path):
+    from rebalancer.backtest.run import recorded_mornings
+
+    ts = pa.timestamp("us", tz="UTC")
+    minutes, ups = [], []
+    # Mon Oct 19 (complete), Tue Oct 20 (one gap), Sat Oct 24 (weekend): 8:00-8:10 New York
+    for day, gap in ((19, None), (20, 8 * 60 + 5), (24, None)):
+        for k in range(11):
+            local_min = 8 * 60 + k
+            minutes.append(datetime(2026, 10, day, 12, 0, tzinfo=UTC) + timedelta(minutes=k))
+            ups.append(local_min != gap)
+    pq.write_table(
+        pa.table({"minute": pa.array(minutes, ts), "recorder_up": ups}),
+        tmp_path / "m.parquet",
+    )
+    assert recorded_mornings(tmp_path / "m.parquet", "08:00", 10) == [datetime(2026, 10, 19, 8, 0)]
+
+
+def test_combined_table_totals_and_early_evidence_note():
+    from rebalancer.backtest.run import render_all
+
+    rows = [
+        {
+            "date": datetime(2026, 10, 20, 8),
+            "No vans at all": 100.0,
+            "What actually happened (Lyft's vans)": 100.0,
+            "Our plan (planned with averages)": 80.0,
+            "Our plan (planned with predictions)": 70.0,
+        },
+        {
+            "date": datetime(2026, 10, 21, 8),
+            "No vans at all": 100.0,
+            "What actually happened (Lyft's vans)": 90.0,
+            "Our plan (planned with averages)": 90.0,
+        },
+    ]
+    text = render_all(rows, "midtown", "08:00")
+    assert "| **Total** | **190** | **200** | **170** | **70** |" in text
+    assert "| vs no vans (same mornings) | 5% fewer | – | 15% fewer | 30% fewer |" in text
+    assert "Only 2 morning(s) so far" in text
+    assert "| Wed Oct 21 | 90 | 100 | 90 | – |" in text

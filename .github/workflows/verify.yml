@@ -1,0 +1,37 @@
+# Step 6, ongoing: re-verify the plan on every fully recorded weekday morning and
+# save the combined table to docs/RESULTS.md. Weekly (after Monday's retraining),
+# or by hand:  gh workflow run verify.yml
+name: verify
+
+on:
+  schedule:
+    - cron: "0 14 * * 2"
+  workflow_dispatch:
+
+permissions:
+  contents: write # commits docs/RESULTS.md
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v5
+      - uses: astral-sh/setup-uv@v6
+      - run: uv sync --frozen --no-dev
+      - name: Verify every recorded morning
+        run: uv run backtest-all --zone midtown --at-time 08:00 --out docs/RESULTS.md
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+          HF_HISTORY_REPO: ${{ vars.HF_HISTORY_REPO || 'citibike-history' }}
+      - name: Save the results to the repository
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add docs/RESULTS.md
+          if git diff --cached --quiet; then
+            echo "No change in results."
+          else
+            git commit -m "Update verification results"
+            git push
+          fi
