@@ -102,11 +102,13 @@ def report(work: Path, sample: int = 10) -> str:
         "",
         f"### {sample} van visits to check by hand",
         "",
-        "Bikes (available + disabled) per minute, from 3 minutes before to 2 after.",
+        "Bikes (available + disabled) per minute, from 3 minutes before to 2 after, and how "
+        "many bikes riders would usually take or return at that station in that time.",
         "",
     ]
     events = con.execute(
-        f"""SELECT station_id, started_minute, ended_minute, bikes_change, action
+        f"""SELECT station_id, started_minute, ended_minute, bikes_change, minutes,
+                   expected_riders
             FROM read_parquet('{m}/fct_inferred_rebalancing.parquet')
             USING SAMPLE {sample} ROWS (reservoir, 42) ORDER BY started_minute"""
     ).fetchall()
@@ -115,7 +117,7 @@ def report(work: Path, sample: int = 10) -> str:
             f"SELECT station_id, name FROM read_parquet('{m}/dim_station.parquet') WHERE is_current"
         ).fetchall()
     )
-    for sid, start, end, change, action in events:
+    for sid, start, end, change, n_min, expected in events:
         series = con.execute(
             f"""SELECT strftime(minute, '%H:%M'), num_bikes_available + num_bikes_disabled,
                        recorder_up
@@ -126,7 +128,10 @@ def report(work: Path, sample: int = 10) -> str:
             [sid, start, end],
         ).fetchall()
         trace = " → ".join(f"{t} {b}" + ("" if up else " (gap)") for t, b, up in series)
-        lines.append(f"- **{names.get(sid, sid)}**, {action} {change:+d}: {trace}")
+        lines.append(
+            f"- **{names.get(sid, sid)}**: {change:+d} bikes in {n_min} min "
+            f"(riders usually ~{expected:.1f}): {trace}"
+        )
     return "\n".join(lines)
 
 

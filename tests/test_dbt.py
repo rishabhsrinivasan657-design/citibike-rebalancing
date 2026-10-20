@@ -68,6 +68,32 @@ def write_weather_and_holidays(raw: Path) -> None:
             cols[v] = pa.array([10.0] * 3, pa.float32())
         cols["weather_code"] = pa.array([1] * 3, pa.int16())
         pq.write_table(pa.table(cols), raw / "weather" / f"{kind}.parquet")
+    (raw / "profiles").mkdir()
+    pq.write_table(
+        pa.Table.from_pylist(
+            [
+                # quiet station: ~6 riders an hour each way at 8am on weekdays
+                {
+                    "station_id": "1.01",
+                    "day_type": "weekday",
+                    "hour": 8,
+                    "departures": 6.0,
+                    "arrivals": 6.0,
+                    "days": 22,
+                },
+                # very busy station: ~5 returns a minute at 8am
+                {
+                    "station_id": "1.02",
+                    "day_type": "weekday",
+                    "hour": 8,
+                    "departures": 30.0,
+                    "arrivals": 300.0,
+                    "days": 22,
+                },
+            ]
+        ),
+        raw / "profiles" / "station_hour.parquet",
+    )
     (raw / "holidays").mkdir()
     pq.write_table(
         pa.table({"date": pa.array([datetime(2026, 11, 26).date()]), "name": ["Thanksgiving"]}),
@@ -268,4 +294,4 @@ def test_report_lists_tables_and_van_visits(built):
     text = report(built.parent)
     assert "| fct_trips | 3 rides" in text
     assert "1 likely van visits (1 drop-offs)" in text
-    assert "**Station A**, drop_off +10" in text and "(gap)" not in text.split("drop_off")[1]
+    assert "**Station A**: +10 bikes in 2 min (riders usually ~0.2)" in text

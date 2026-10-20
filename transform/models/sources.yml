@@ -19,6 +19,10 @@ sources:
       - name: holidays
         meta:
           external_location: "read_parquet('{{ env_var('RAW_ROOT') }}/holidays/holidays.parquet')"
+      - name: station_hour_profile
+        description: "Average departures/arrivals per station, day type and local hour (Step 2)."
+        meta:
+          external_location: "read_parquet('{{ env_var('RAW_ROOT') }}/profiles/station_hour.parquet')"
 
   - name: live
     description: "Step 1 recorder output (Hugging Face dataset citibike-station-status, lake/)."
