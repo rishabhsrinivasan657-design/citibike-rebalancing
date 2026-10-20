@@ -34,7 +34,7 @@ A ✅ means the check has passed. A ⬜ means it hasn't been done yet.
 
 Create the folder, the tools, and these planning documents.
 
-- ✅ The automatic checks run and pass (94 Python tests + 8 dbt known-answer tests).
+- ✅ The automatic checks run and pass (100 Python tests + 8 dbt known-answer tests).
 
 ---
 
@@ -182,7 +182,7 @@ mid-November, so for now van moves are detected from the size of the jump
 alone. When those trips arrive, we can confirm that no riders explain them.
 
 ## Step 4: Predict how busy each station will be
-**Status: in progress**
+**Status: done (Oct 20, 2026)**
 
 **What it does:** for each station and each hour, predicts how many riders will
 **take** a bike and how many will **return** one. The planner uses these instead of
@@ -202,10 +202,28 @@ the hour starts:
 tested once on **September 2026**, a month it never saw. It must beat the averages.
 
 **Checks**
-- ⬜ Beats the plain averages on September, overall and for the 7–10am rush.
-- ⬜ Uses no information from after the hour starts (forecast weather only).
-- ⬜ On the recorded Oct 20 morning, the planner with predictions does at least as
-  well in verification as with averages.
+- ✅ Beats the plain averages on September 2026 (never seen in training), everywhere:
+
+  | Predicting | Hours | Averages error | Model error | |
+  |---|---|---|---|---|
+  | Pickups | all | 1.55 | 1.36 | 12% better |
+  | Pickups | weekday 7–10am | 2.14 | 1.90 | 11% better |
+  | Returns | all | 1.60 | 1.41 | 11% better |
+  | Returns | weekday 7–10am | 2.23 | 2.03 | 9% better |
+
+  (Error = average miss, in riders per station per hour.) It still predicts about
+  14% too few riders overall in September, which is busier than most training months.
+- ✅ Uses no information from after the hour starts (forecast weather only; the
+  station averages it's given come from the training months only when testing).
+- ✅ On the Oct 20 morning, the planner with predictions does at least as well:
+  269 riders affected vs 271 with averages. That's within noise for one morning.
+
+**The first try failed, and was caught.** The first model did far *worse* than
+the averages: its maths became unstable (some predictions ~10^71), and "month"
+told it nothing about September, a month it never trained on. Fixes: regularisation,
+daylight hours instead of month (September's daylight matches early April's), and an
+**approval gate**: a model is saved and used only if it beats the averages on the
+test month. Otherwise everything falls back to averages automatically.
 
 **Not used (on purpose):** "how busy was this station in the last hour". Live, we
 only see bike counts, not separate pickups and returns, so the model couldn't get
