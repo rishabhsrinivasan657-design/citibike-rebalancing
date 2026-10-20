@@ -221,3 +221,55 @@ def test_build_instance_filters_zone_and_closed_stations():
     assert a.departures == pytest.approx(20) and a.arrivals == pytest.approx(2)
     report = render(inst, plan(inst), datetime(2000, 1, 3, 8, 0))
     assert "| 1 | 1 | S b | S a |" in report and "Van plan: Midtown, weekday 08:00–09:00" in report
+
+
+def test_recorded_snapshot_reads_the_right_minute_and_station_version(tmp_path):
+    from datetime import UTC, datetime
+
+    import pyarrow as pa
+    import pyarrow.parquet as pq
+
+    from rebalancer.planner.run import recorded_snapshot
+
+    noon_utc = datetime(2026, 10, 20, 12, 0, tzinfo=UTC)  # 8:00 New York (EDT)
+    ts = pa.timestamp("us", tz="UTC")
+    pq.write_table(
+        pa.table(
+            {
+                "station_id": ["a", "a", "b"],
+                "minute": pa.array([noon_utc, noon_utc.replace(minute=1), noon_utc], ts),
+                "num_bikes_available": [7, 9, 3],
+                "num_ebikes_available": [1, 1, 0],
+                "num_bikes_disabled": [0, 0, 1],
+                "num_docks_available": [13, 11, 16],
+                "num_docks_disabled": [0, 0, 0],
+                "is_renting": [True, True, True],
+                "is_returning": [True, True, True],
+                "recorder_up": [True, True, True],
+                "last_reported": pa.array([noon_utc] * 3, ts),
+            }
+        ),
+        tmp_path / "minute.parquet",
+    )
+    early, late = datetime(2026, 10, 19, tzinfo=UTC), datetime(2026, 10, 20, 11, tzinfo=UTC)
+    pq.write_table(
+        pa.table(
+            {
+                "station_id": ["a", "a", "b"],
+                "short_name": ["1.01", "1.01", "1.02"],
+                "name": ["A old", "A new", "B"],
+                "lat": [40.75] * 3,
+                "lon": [-73.98] * 3,
+                "region_id": ["71"] * 3,
+                "capacity": [18, 20, 20],
+                "valid_from": pa.array([early, late, early], ts),
+                "valid_to": pa.array([late, None, None], ts),
+            }
+        ),
+        tmp_path / "stations.parquet",
+    )
+    info, status = recorded_snapshot(
+        tmp_path / "minute.parquet", tmp_path / "stations.parquet", datetime(2026, 10, 20, 8, 0)
+    )
+    assert {s.station_id: s.num_bikes_available for s in status} == {"a": 7, "b": 3}
+    assert {i.station_id: i.name for i in info} == {"a": "A new", "b": "B"}

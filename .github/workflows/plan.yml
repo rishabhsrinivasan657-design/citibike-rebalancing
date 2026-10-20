@@ -2,6 +2,7 @@
 # station-hour profile from the history dataset. The move list appears on the run's
 # summary page. Start it with:
 #   gh workflow run plan.yml -f start=08:00 -f vans=3
+#   gh workflow run plan.yml -f at="2026-10-20 08:00"   # a recorded morning
 name: plan
 
 on:
@@ -19,6 +20,9 @@ on:
       vans:
         description: "Number of vans"
         default: "3"
+      at:
+        description: "Use recorded bike counts at this New York time, YYYY-MM-DD HH:MM (optional)"
+        default: ""
 
 permissions:
   contents: read
@@ -34,6 +38,7 @@ jobs:
       - run: >-
           uv run plan-moves --zone "${{ inputs.zone }}" --start "${{ inputs.start }}"
           --day-type "${{ inputs.day_type }}" --vans "${{ inputs.vans }}"
+          ${{ inputs.at && format('--at "{0}"', inputs.at) || '' }}
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
           HF_HISTORY_REPO: ${{ vars.HF_HISTORY_REPO || 'citibike-history' }}

@@ -2,9 +2,11 @@
 
     plan-moves --start 08:00 --vans 3                      # Midtown, weekday 8–9am
     plan-moves --profile raw/profiles/station_hour.parquet # local profile file
+    plan-moves --at "2026-10-20 08:00"                     # a recorded morning
 
-Bike counts come from the live feed at run time; expected departures and arrivals
-come from the station-hour profile (Step 2) for the chosen day type and time.
+Bike counts come from the live feed at run time, or with --at from the recorded
+minute table (Step 3) at that New York time. Expected departures and arrivals come
+from the station-hour profile (Step 2) for the day type and time.
 """
 
 from __future__ import annotations
@@ -88,7 +90,9 @@ def build_instance(
     return Instance(stations, centre, params, label)
 
 
-def render(inst: Instance, result: Plan, start: datetime) -> str:
+def render(
+    inst: Instance, result: Plan, start: datetime, source: str = "from the live feed when this ran"
+) -> str:
     s = score(inst, result)
     names = {st.id: st.name for st in inst.stations}
     h = inst.params.horizon_min
@@ -136,33 +140,83 @@ def render(inst: Instance, result: Plan, start: datetime) -> str:
         lines += ["", f"{len(result.dropped)} chosen trips were dropped as not doable in time."]
     lines += [
         "",
-        "_Bike counts are from the live feed when this ran; expected riders are averages for "
+        f"_Bike counts are {source}; expected riders are averages for "
         "this day type and time over the last 12 months. Riders who'd find no bike are an "
         "estimate from a steady-rate simulation._",
     ]
     return "\n".join(lines)
 
 
+def hub_file(path_in_repo: str) -> Path:
+    """Download one file from the history dataset (needs HF_TOKEN)."""
+    from huggingface_hub import HfApi, hf_hub_download
+
+    from rebalancer.ingest.recorder import resolve_repo_id
+
+    token = os.environ.get("HF_TOKEN")
+    if not token:
+        sys.exit("Set HF_TOKEN, or pass local files")
+    repo = resolve_repo_id(
+        HfApi(token=token), os.environ.get("HF_HISTORY_REPO", "citibike-history"), False
+    )
+    return Path(hf_hub_download(repo, path_in_repo, repo_type="dataset", token=token))
+
+
 def load_profile(path: Path | None) -> list[dict]:
-    if path is None:
-        from huggingface_hub import HfApi, hf_hub_download
+    return pq.read_table(path or hub_file("raw/profiles/station_hour.parquet")).to_pylist()
 
-        from rebalancer.ingest.recorder import resolve_repo_id
 
-        token = os.environ.get("HF_TOKEN")
-        if not token:
-            sys.exit("Set HF_TOKEN, or pass --profile with a local file")
-        repo = resolve_repo_id(
-            HfApi(token=token),
-            os.environ.get("HF_HISTORY_REPO", "citibike-history"),
-            need_write=False,
+def recorded_snapshot(
+    minute_path: Path, station_path: Path, at_local: datetime
+) -> tuple[list[StationInformation], list[StationStatus]]:
+    """Station list and bike counts as recorded at a New York local minute."""
+    import duckdb
+
+    con = duckdb.connect()
+    con.execute("SET TimeZone = 'UTC'")
+    at = f"timezone('America/New_York', TIMESTAMP '{at_local:%Y-%m-%d %H:%M:00}')"
+    status_rows = con.execute(
+        f"""SELECT station_id, num_bikes_available, num_ebikes_available, num_bikes_disabled,
+                   num_docks_available, num_docks_disabled, is_renting, is_returning,
+                   epoch(last_reported)::BIGINT AS last_reported
+            FROM read_parquet('{minute_path.as_posix()}')
+            WHERE minute = {at} AND recorder_up"""
+    ).fetchall()
+    if not status_rows:
+        sys.exit(f"no recorded bike counts at {at_local:%Y-%m-%d %H:%M} New York time")
+    info_rows = con.execute(
+        f"""SELECT station_id, short_name, name, lat, lon, region_id, capacity
+            FROM read_parquet('{station_path.as_posix()}')
+            WHERE valid_from <= {at} AND (valid_to IS NULL OR valid_to > {at})"""
+    ).fetchall()
+    info = [
+        StationInformation(
+            station_id=r[0],
+            short_name=r[1],
+            name=r[2],
+            lat=r[3],
+            lon=r[4],
+            region_id=r[5],
+            capacity=r[6],
         )
-        path = Path(
-            hf_hub_download(
-                repo, "raw/profiles/station_hour.parquet", repo_type="dataset", token=token
-            )
+        for r in info_rows
+    ]
+    status = [
+        StationStatus(
+            station_id=r[0],
+            num_bikes_available=r[1],
+            num_ebikes_available=r[2],
+            num_bikes_disabled=r[3],
+            num_docks_available=r[4],
+            num_docks_disabled=r[5],
+            is_installed=True,
+            is_renting=r[6],
+            is_returning=r[7],
+            last_reported=r[8],
         )
-    return pq.read_table(path).to_pylist()
+        for r in status_rows
+    ]
+    return info, status
 
 
 def main() -> None:
@@ -173,30 +227,50 @@ def main() -> None:
     parser.add_argument("--vans", type=int, default=3)
     parser.add_argument("--minutes", type=float, default=60.0)
     parser.add_argument("--profile", type=Path)
+    parser.add_argument(
+        "--at",
+        help="use recorded bike counts at this New York time, "
+        "'YYYY-MM-DD HH:MM' (sets --start and --day-type)",
+    )
+    parser.add_argument("--minute-table", type=Path, help="local fct_station_minute.parquet")
+    parser.add_argument("--station-table", type=Path, help="local dim_station.parquet")
     args = parser.parse_args()
     logging.basicConfig(level=logging.WARNING)
 
-    s = Settings()
-    with httpx.Client(timeout=30, follow_redirects=True) as client:
-        feeds = discover_feeds(client, s.gbfs_discovery_url, s.gbfs_language)
-        info = fetch_json(client, feeds["station_information"], 3)
-        status = fetch_json(client, feeds["station_status"], 3)
-    if not (info.ok and status.ok):
-        sys.exit("could not fetch the live station feeds")
-
-    hh, mm = map(int, args.start.split(":"))
-    start = datetime(2000, 1, 3, hh, mm)  # only the time of day is used
     params = Params(vans=args.vans, horizon_min=args.minutes)
+    if args.at:
+        import holidays
+
+        start = datetime.strptime(args.at, "%Y-%m-%d %H:%M")
+        weekend = start.weekday() >= 5 or start.date() in holidays.country_holidays(
+            "US", subdiv="NY", years=start.year
+        )
+        day_type = "weekend" if weekend else "weekday"
+        info_list, status_list = recorded_snapshot(
+            args.minute_table or hub_file("marts/fct_station_minute.parquet"),
+            args.station_table or hub_file("marts/dim_station.parquet"),
+            start,
+        )
+        source = f"recorded at {start:%a %b %d, %H:%M} New York time"
+    else:
+        s = Settings()
+        with httpx.Client(timeout=30, follow_redirects=True) as client:
+            feeds = discover_feeds(client, s.gbfs_discovery_url, s.gbfs_language)
+            info = fetch_json(client, feeds["station_information"], 3)
+            status = fetch_json(client, feeds["station_status"], 3)
+        if not (info.ok and status.ok):
+            sys.exit("could not fetch the live station feeds")
+        hh, mm = map(int, args.start.split(":"))
+        start = datetime(2000, 1, 3, hh, mm)  # only the time of day is used
+        day_type = args.day_type
+        info_list = parse_feed(info.payload, StationInformation).stations
+        status_list = parse_feed(status.payload, StationStatus).stations
+        source = "from the live feed when this ran"
+
     inst = build_instance(
-        load_profile(args.profile),
-        parse_feed(info.payload, StationInformation).stations,
-        parse_feed(status.payload, StationStatus).stations,
-        args.zone,
-        start,
-        args.day_type,
-        params,
+        load_profile(args.profile), info_list, status_list, args.zone, start, day_type, params
     )
-    report = render(inst, plan(inst), start)
+    report = render(inst, plan(inst), start, source)
     print(report)
     if summary := os.environ.get("GITHUB_STEP_SUMMARY"):
         with open(summary, "a") as f:
