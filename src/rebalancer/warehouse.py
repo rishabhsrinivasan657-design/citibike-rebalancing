@@ -65,6 +65,13 @@ def report(work: Path, sample: int = 10) -> str:
         return f"read_parquet('{m}/{name}')"
 
     trips = one(f"SELECT count(*), count(start_station_id) FROM {t('fct_trips/*/*.parquet')}")
+    odd = one(
+        "SELECT count(*) FILTER (WHERE duration_min < 0), "
+        "count(*) FILTER (WHERE duration_min < 0 AND started_at_local::date IN "
+        "('2025-11-02', '2026-11-01') AND hour(started_at_local) IN (0, 1, 2)), "
+        "count(*) FILTER (WHERE duration_min > 24 * 60) "
+        f"FROM {t('fct_trips/*/*.parquet')}"
+    )
     stations = one(
         "SELECT count(DISTINCT station_id), count(*), count(*) FILTER (WHERE NOT is_current) "
         f"FROM {t('dim_station.parquet')}"
@@ -83,7 +90,9 @@ def report(work: Path, sample: int = 10) -> str:
         "",
         "| Table | What's in it |",
         "|---|---|",
-        f"| fct_trips | {trips[0]:,} rides; {trips[1] / trips[0]:.1%} matched to a live station |",
+        f"| fct_trips | {trips[0]:,} rides; {trips[1] / trips[0]:.1%} matched to a live station; "
+        f"{odd[0]:,} end before they start ({odd[1]:,} of them on the night clocks go back); "
+        f"{odd[2]:,} last over a day |",
         f"| dim_station | {stations[0]:,} stations, {stations[1]:,} versions "
         f"({stations[2]:,} closed) |",
         f"| fct_station_minute | {minutes[0]:,} station-minutes, {minutes[1]:%Y-%m-%d %H:%M} → "
