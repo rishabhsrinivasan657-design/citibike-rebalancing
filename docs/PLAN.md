@@ -34,7 +34,7 @@ A ✅ means the check has passed. A ⬜ means it hasn't been done yet.
 
 Create the folder, the tools, and these planning documents.
 
-- ✅ The automatic checks run and pass (91 Python tests + 8 dbt known-answer tests).
+- ✅ The automatic checks run and pass (94 Python tests + 8 dbt known-answer tests).
 
 ---
 
@@ -256,11 +256,21 @@ on a weekday.
   25.1 s, hitting the solver's time limit while still calling itself "Optimal". The
   model now treats bike counts as smooth (rounded down after) and reports the true status.
 
+**Multi-stop trips (Oct 20, 2026)**
+- On the real morning, the planner served **none** of the 14 stations heading for
+  empty. Each needed only 3–6 bikes, and a whole trip for so few bikes lost out to
+  emptying full stations.
+- Trips now **load once and drop off at up to 4 stations**, like real crews: e.g.
+  load at W 42 St & 6 Ave, then top up W 54 St & 9 Ave, W 49 St & 8 Ave and
+  W 50 St & 9 Ave on the way. Riders with no bike (planner's estimate): 22 → 16,
+  where before it couldn't help them at all. Still 0.3 s to solve.
+
 **Known limits (to fix in later steps)**
 - Expected riders are 12-month averages, not predictions. Step 4 replaces them.
-- The vans are under-used (41 bikes in an hour) and "no dock" improves less than
-  "no bike". Full stations can only send bikes to the 10 roomiest stations, which
-  is a simplification worth revisiting.
+- ~~Empty and full stations aren't fixed together.~~ Fixed with multi-stop trips.
+- The maths model approximates driving between stops; some chosen trips get
+  dropped by the scheduler when real routes don't fit the hour (2 this morning).
+- Full stations can only send bikes to the 10 roomiest stations.
 
 ## Step 6: Test the plan on real days (backtest)
 **Status: built and working (Oct 20, 2026). The verdict needs 10+ mornings.**
@@ -302,6 +312,12 @@ records can confirm the results later.
   | No vans at all | 80 | 249 | 328 |
   | Our plan instead (3 vans, 101 bikes) | 80 | 196 | **276 (16% fewer)** |
 
+  After the multi-stop planner (same morning, re-run):
+
+  | Version | No bike | No free dock | Riders affected |
+  |---|---|---|---|
+  | Our plan, multi-stop (3 vans, 77 bikes) | 77 | 194 | **271 (17% fewer)** |
+
 **What this first morning says (not yet evidence)**
 - The real morning was about twice as hard as the 12-month averages suggested
   (328 vs 165 riders affected with no moves). Better predictions (Step 4) matter.
@@ -309,8 +325,10 @@ records can confirm the results later.
   empty or full, so they made no measurable difference here. Lyft may also use
   methods our detector can't see (e.g. staff docking extra bikes at busy stations),
   so their effort is probably understated.
-- Our plan only helped full stations; "no bike" didn't move. The planner should
-  learn to fix both at once (Step 5 known limit).
+- Even with multi-stop trips, "no bike" only improved 80 → 77. The planner tops up
+  the stations the 12-month averages say will run empty (it expected 22 riders
+  without a bike; reality had 80), so **prediction, not planning, is now the main
+  limit**. That's Step 4.
 
 **Known limits:** one morning is an anecdote, not evidence. The real verdict needs
 at least 10 weekday mornings (about 2 weeks of recording), plus predictions from

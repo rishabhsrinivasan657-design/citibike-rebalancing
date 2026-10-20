@@ -155,6 +155,12 @@ Urgency: the minute station *i* is expected to run empty, `b_i / net_out_rate`, 
 full, `D_i / net_in_rate`. Weight `w_i = clip(H / minutes_until_problem, 1, 6)`.
 
 ### Stage 1: choose the moves (MIP, PuLP + CBC)
+
+*Updated Oct 20, 2026: trips are one pickup plus up to 4 drop-offs. Variables are
+`x_ij` (bikes, continuous, rounded down), `w_ij` (binary: j is a stop on a trip from i)
+and `y_i` (integer: trips from donor i), with `Σ_j x_ij ≤ Q·y_i`,
+`Σ_j w_ij ≤ 4·y_i`, and van time `Σ y_i (deadhead + load) + Σ w_ij (τ_ij + unload)
++ 2·0.25·Σ x ≤ K·T`. The single-drop formulation below is kept for history.*
 Variables per allowed pair (donor *i* → receiver *j*): bikes `x_ij ∈ ℤ≥0`, trips `z_ij ∈ ℤ≥0`.
 
 ```
