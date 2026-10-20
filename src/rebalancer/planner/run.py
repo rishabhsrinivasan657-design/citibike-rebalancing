@@ -33,7 +33,13 @@ from rebalancer.planner.geo import straight_distance_m
 from rebalancer.planner.model import Instance, Params, Plan, Station, minutes_until_problem
 from rebalancer.planner.schedule import plan, score
 
-ZONES = {"midtown": ((40.7536, -73.9832), 1500.0)}  # centre (Bryant Park), radius in metres
+# Zone centre and radius in metres.
+ZONES = {
+    "midtown": ((40.7536, -73.9832), 1500.0),  # Bryant Park
+    "downtown": ((40.7075, -74.0110), 1300.0),  # Financial District
+    "union square": ((40.7359, -73.9911), 1200.0),
+    "williamsburg": ((40.7146, -73.9580), 1300.0),
+}
 
 
 def expected_counts(rates: dict[int, tuple[float, float]], start: datetime, minutes: float):

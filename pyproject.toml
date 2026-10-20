@@ -40,6 +40,12 @@ warehouse = "rebalancer.warehouse:main"
 backtest = "rebalancer.backtest.run:main"
 forecast-train = "rebalancer.forecast.train:main"
 
+[project.optional-dependencies]
+app = [
+    "pydeck>=0.9",
+    "streamlit>=1.39",
+]
+
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
@@ -60,5 +66,6 @@ markers = [
     "live: hits the real Citi Bike GBFS feed",
     "integration: needs the docker compose stack running",
     "dbt: builds the dbt project on a tiny dataset (needs the transform group)",
+    "app_live: runs the real app on live data (needs HF_TOKEN and the app extra)",
 ]
-addopts = "-m 'not live and not integration and not dbt'"
+addopts = "-m 'not live and not integration and not dbt and not app_live'"
