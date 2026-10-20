@@ -1,6 +1,7 @@
 # Records Citi Bike station data around the clock (see docs/DESIGN.md).
-# A new run starts every 2 hours and records for 2 h 45 m, so runs overlap and
-# a late start by GitHub's scheduler doesn't leave a gap.
+# Each run records for 2 h 45 m. 15 minutes before it ends, its "relay" job starts
+# the next run itself, so recording doesn't depend on GitHub's scheduler (which
+# skipped two runs on 2026-10-19). The schedule below is only a backup.
 name: record
 
 on:
@@ -47,3 +48,30 @@ jobs:
           path: lake-pending/
           retention-days: 7
           if-no-files-found: ignore
+
+  relay:
+    # Starts the next run shortly before this one ends. Skipped for short test runs,
+    # and skipped if another recent run is already in progress (so chains never multiply).
+    if: ${{ (inputs.minutes || '165') >= 60 }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    steps:
+      - name: Wait until 15 minutes before the recording ends
+        run: sleep $(( (${{ inputs.minutes || '165' }} - 15) * 60 ))
+      - name: Start the next run unless one is already covering
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          cutoff=$(date -u -d '-120 minutes' +%Y-%m-%dT%H:%M:%SZ)
+          others=$(gh run list --workflow record.yml --limit 20 \
+            --json databaseId,status,createdAt \
+            -q "[.[] | select(.databaseId != ${{ github.run_id }})
+                 | select(.status == \"in_progress\" or .status == \"queued\")
+                 | select(.createdAt > \"$cutoff\")] | length")
+          if [ "$others" -gt 0 ]; then
+            echo "Another recent run is already recording; not starting one."
+          else
+            gh workflow run record.yml
+            echo "Started the next run."
+          fi
