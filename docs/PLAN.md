@@ -54,6 +54,11 @@ ourselves. Every day we're not recording is data we can never get back.
 - ✅ If the saving part crashes and restarts, nothing is lost.
 - ✅ If the recording part restarts, it picks up where it left off.
 - ⬜ It runs for 24 hours straight and catches at least 98% of the minutes.
+  - Since the relay fix (Oct 20, 01:51–14:20 UTC): **750 of 750 minutes (100%)**, no gaps.
+    Every run started the next one itself; GitHub's schedule fired only 3 of 7 times.
+  - Since the very start: 964 of 1,047 minutes (92.1%), because of the 82-minute gap
+    before the fix. The first full 24 hours without that gap is checked by the daily
+    report on Oct 21 (9:40am New York time).
 - ✅ A version that runs free on GitHub was built and tested on the real data for
      3 minutes (every check succeeded, every row was saved, it stopped on time).
 - ✅ If uploading fails, the files are kept and sent again later (tested).
