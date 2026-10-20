@@ -34,7 +34,7 @@ A ✅ means the check has passed. A ⬜ means it hasn't been done yet.
 
 Create the folder, the tools, and these planning documents.
 
-- ✅ The automatic checks run and pass (81 Python tests + 8 dbt known-answer tests).
+- ✅ The automatic checks run and pass (91 Python tests + 8 dbt known-answer tests).
 
 ---
 
@@ -263,7 +263,7 @@ on a weekday.
   is a simplification worth revisiting.
 
 ## Step 6: Test the plan on real days (backtest)
-**Status: in progress**
+**Status: built and working (Oct 20, 2026). The verdict needs 10+ mornings.**
 
 **What it does:** replays a real recorded morning minute by minute and asks
 "what if?". It compares three versions of the same morning in the same area:
@@ -290,11 +290,27 @@ mid-November. Our own minute-by-minute recordings let us test now, and the trip
 records can confirm the results later.
 
 **Checks**
-- ⬜ Replaying "what actually happened" without the hidden demand reproduces the
-  recorded bike counts exactly, minute by minute.
-- ⬜ Hand-built cases behave correctly (empty and full limits, van moves, hidden demand).
-- ⬜ A results table for this morning (Tue Oct 20, 8–9am, Midtown) comparing the
-  three versions, with the assumptions written next to it.
+- ✅ Replaying "what actually happened" without the hidden demand reproduces the
+  recorded bike counts exactly: largest difference **0 bikes**.
+- ✅ 8 hand-built cases behave correctly: empty and full limits, van moves, hidden
+  demand, a van arriving to find fewer bikes than planned, and reading the tables.
+- ✅ First results table: **Tue Oct 20, 8–9am, Midtown** (121 stations, no recorder gaps):
+
+  | Version | No bike | No free dock | Riders affected |
+  |---|---|---|---|
+  | What actually happened (Lyft's vans) | 80 | 249 | 328 |
+  | No vans at all | 80 | 249 | 328 |
+  | Our plan instead (3 vans, 101 bikes) | 80 | 196 | **276 (16% fewer)** |
+
+**What this first morning says (not yet evidence)**
+- The real morning was about twice as hard as the 12-month averages suggested
+  (328 vs 165 riders affected with no moves). Better predictions (Step 4) matter.
+- Lyft's *detected* vans in this hour moved only 24 bikes, at stations that never ran
+  empty or full, so they made no measurable difference here. Lyft may also use
+  methods our detector can't see (e.g. staff docking extra bikes at busy stations),
+  so their effort is probably understated.
+- Our plan only helped full stations; "no bike" didn't move. The planner should
+  learn to fix both at once (Step 5 known limit).
 
 **Known limits:** one morning is an anecdote, not evidence. The real verdict needs
 at least 10 weekday mornings (about 2 weeks of recording), plus predictions from

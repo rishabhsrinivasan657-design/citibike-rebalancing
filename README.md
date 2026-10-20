@@ -34,4 +34,10 @@ Build the clean tables with dbt (Step 3), on GitHub; also runs every 6 hours:
 gh workflow run transform.yml
 ```
 
+Backtest a recorded morning (Step 6), on GitHub:
+
+```bash
+gh workflow run backtest.yml -f at="2026-10-20 08:00"
+```
+
 Parquet lands in `data/lake/<table>/date=YYYY-MM-DD/hour=HH/`.
