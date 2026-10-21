@@ -15,6 +15,7 @@ dependencies = [
     "pyarrow>=17",
     "pydantic>=2.8",
     "pydantic-settings>=2.4",
+    "pyyaml>=6.0",
     "scikit-learn>=1.5",
 ]
 
@@ -39,6 +40,7 @@ plan-moves = "rebalancer.planner.run:main"
 warehouse = "rebalancer.warehouse:main"
 backtest = "rebalancer.backtest.run:main"
 backtest-all = "rebalancer.backtest.run:main_all"
+okf-validate = "rebalancer.okf.validate:main"
 forecast-train = "rebalancer.forecast.train:main"
 
 [project.optional-dependencies]
