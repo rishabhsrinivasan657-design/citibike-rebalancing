@@ -269,3 +269,41 @@ and skewed; Poisson loss predicts means directly).
 | Leakage guard | Only forecast weather; the profile used as a feature is computed from the **training months only** when evaluating. |
 | Runs on | GitHub Actions (`train.yml`); model + metrics pushed to `models/` in the history dataset. |
 | Live use | The app/planner fetches Open-Meteo's live forecast; backtests use the historical-forecast archive for that day. |
+
+## Context layer for agents: OKF (Step 8, planned)
+
+```
+dbt build ─► manifest.json, catalog.json, run_results.json, sources.json
+                 │
+                 ▼
+okf/generate.py ─► okf/ bundle (published to the history dataset with the marts)
+   glossary/*.md        hand-written business concepts (station, van visit, ...)
+   tables/<model>.md    one per dbt model: columns, tests + latest results,
+                        links to parents (lineage) and join partners
+   sources/*.md         Citi Bike feed, trip files, Open-Meteo
+   metrics/<name>.md    Attested Computations (approved SQL + parameters)
+   index.md, log.md     reserved files per the spec
+                 │
+                 ▼
+okf/mcp_server.py ─► tools: search_concepts, read_concept, run_metric
+                     (no free-form SQL) → answer + receipt
+                 │
+                 ▼
+okf/eval.py ─► 25 questions, with vs without the bundle → okf/EVAL.md
+```
+
+| Choice | Why |
+|---|---|
+| Generate from dbt artifacts, never hand-maintain table docs | dbt is already the single source of truth for models, tests and lineage; a generator keeps the bundle from drifting. |
+| `generated` on everything the generator writes; `verified` only from a reviewed list in the repo | Trust signals mean something only if "verified" requires a human. |
+| `stale_after` = table's last build + its freshness error window | Uses the existing freshness SLAs; an agent can tell stale data from fresh. |
+| Metrics as parameterised SQL with a content hash | The receipt (query hash, parameters, data revision, time, executor) lets anyone re-run and confirm; a modified query fails the hash check. |
+| New small mart `agg_station_day` for metrics | Agent queries must run on a laptop; the minute table grows ~3.6M rows/day. |
+| MCP server without a raw SQL tool | Forces answers through approved definitions; the eval's "without" arm gets raw SQL to measure the difference. |
+| Spec version pinned in the bundle's `index.md` | v0.x will change; one generator module owns the format. |
+
+Spec status (checked 2026-10-21): v0.1 June 12, 2026; v0.2 July 25, 2026, with
+`sources`, `generated`/`verified`, `stale_after`, `status` and Attested Computation,
+all optional and backward compatible. Whether Attested Computation is a concept type
+or a set of keys (`runtime`, `parameters`, `computation`, `executor`, `attester` in
+one implementation) is confirmed in phase 8.0 from the official spec.
