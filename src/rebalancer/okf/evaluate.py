@@ -76,11 +76,19 @@ def _top(rows: list[dict], key: str) -> tuple[list[str], float | None]:
 
 
 def recorded_days(kb: KnowledgeBase) -> list[str]:
+    """Days to ask about, best first: fully recorded days (most recent first), then
+    partly recorded ones by minutes captured, so two different days are used whenever
+    the recorder has more than one."""
     rows = _metric(kb, "recorder-coverage", start_date="2000-01-01", end_date="2100-01-01")
     full = [
         r["local_date"] for r in rows if r["coverage"] >= 0.95 and r["minutes_in_window"] >= 1380
     ]
-    return full or [r["local_date"] for r in sorted(rows, key=lambda r: -r["minutes_recorded"])]
+    rest = [
+        r["local_date"]
+        for r in sorted(rows, key=lambda r: -r["minutes_recorded"])
+        if r["local_date"] not in full
+    ]
+    return sorted(full, reverse=True) + rest
 
 
 def trip_months(data: Path) -> list[str]:
@@ -98,7 +106,7 @@ def trip_months(data: Path) -> list[str]:
 
 def build_questions(kb: KnowledgeBase, data: Path) -> list[Question]:
     days = recorded_days(kb)
-    d1, d2 = days[-1], days[-2] if len(days) > 1 else days[-1]
+    d1, d2 = days[0], days[1] if len(days) > 1 else days[0]
     months = trip_months(data)
     m_last = months[-1]
     m_prev = months[-2] if len(months) > 1 else m_last

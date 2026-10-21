@@ -401,98 +401,77 @@ Step 4 instead of averages.
 ---
 
 ## Step 8: A context layer for AI agents (OKF)
-**Status: planned, not started**
+**Status: built and tested (Oct 21, 2026). The real eval run waits for an Anthropic API key.**
 
 **What it is:** OKF (Open Knowledge Format) is Google Cloud's open spec for giving AI
 agents business context: what each table means, how metrics are defined, how tables
-join. A bundle is a folder of markdown files, one concept per file, with a small YAML
-header (only `type` is required) and links between concepts. v0.1: June 2026.
-v0.2 (July 2026) adds trust signals: where knowledge came from (`sources`),
-machine-written vs human-checked (`generated` / `verified`), when it goes out of date
-(`stale_after`), lifecycle (`status`), and **Attested Computation**: an agent runs an
-approved metric query and gets proof it ran the approved version, instead of writing
-its own SQL.
+join. A bundle is a folder of markdown files, one concept per file. v0.2 (July 2026)
+adds trust signals (`sources`, `generated` / `verified`, `stale_after`, `status`) and
+**Attested Computation**: an agent runs an approved query and gets proof it ran the
+approved version, instead of writing its own SQL. Spec read from Google's repository
+(`GoogleCloudPlatform/knowledge-catalog`, `okf/SPEC.md`).
 
-**Why add it here:** no job ad asks for OKF yet (it's four months old), but the skills
-underneath it do: metadata, data governance, lineage, semantic layers and "context for
-agents" came up in about 11 of the target job ads. The dbt project already holds most
-of what OKF needs, so this is days of work, not a new project.
+**What we built:** an AI agent can answer *"Which Midtown stations ran empty most on
+Oct 20?"* only through approved metrics. Each answer comes with a receipt that a
+separate checker verifies, plus warnings when data is stale or a definition hasn't
+been reviewed.
 
-**The goal, in one line:** an AI agent can answer questions like *"Which Midtown
-stations ran empty most this week?"* by running approved metrics, citing which
-definition it used, and warning when data is stale or unverified. An eval measures how
-much the bundle helps.
+### 8.0 Validator ✅
+- ✅ `okf-validate` checks the spec's hard rules (errors) and soft guidance (warnings).
+- ✅ Google's own sample bundles pass with **0 errors, 0 warnings**.
+- ✅ Tests show it catches each kind of mistake. (One was missed at first: date
+  headings with spaces, like "21 Oct 2026". Fixed.)
 
-### Phases
+### 8.1 Documented warehouse ✅
+- ✅ Every dbt model and every mart column now has a description, plus notes on grain,
+  how tables join, and known quirks. A test fails the build if anything is undocumented.
+- ✅ 9 hand-written glossary concepts (riders affected, hidden demand, van visit, ...).
+- **Found while testing:** a YAML key named `on` was read as the value *true* and
+  froze dbt silently. Renamed, with a warning in the file.
 
-**8.0: Pin down the spec (½ day)**
-- Read the official v0.2 spec and examples; settle the open question of whether
-  Attested Computation is its own concept type or a set of header fields.
-- Write a small validator for our bundles (required `type`, valid links, date formats).
-- ⬜ Check: Google's sample bundles pass our validator.
+### 8.2 Bundle generated from dbt ✅
+- ✅ `okf-generate` writes one concept per table and per source: schema with types,
+  joins, lineage (as links), latest test results, caveats, origin, freshness.
+- ✅ Trust: tables whose tests all passed are marked *machine-confirmed*
+  (`process:dbt-tests`); *human-reviewed* only from `okf/verified.yml`.
+- ✅ `stale_after`: 7 hours for live-fed tables, 35 days for monthly ones; a stale
+  source is marked stale.
+- ✅ Real build on GitHub: **31 concepts, 0 errors, 0 warnings** (strict), saved next
+  to the tables on Hugging Face after every warehouse build.
+- **Found while testing:** dbt overwrites its results file on every command, which
+  erased the test results the trust marks depend on. The build's copy is now kept.
 
-**8.1: Document the warehouse properly (1 day)**
-- Today only 5 of ~14 dbt models have descriptions. Write descriptions for every
-  model and important column, plus a glossary: station, dock, van visit, hidden
-  demand, "riders affected", and the known quirks (repeated hour when clocks go back,
-  month-end duplicate rides, Jersey City excluded).
-- ⬜ Check: a dbt test fails the build if any mart or mart column lacks a description.
+### 8.3 Approved metrics with receipts ✅
+- ✅ Five Attested Computations: stations empty longest, stations full longest, van
+  activity, recorder coverage, busiest stations. Small summary tables keep them
+  laptop-sized.
+- ✅ Each run returns a receipt (fingerprints of the SQL, the data and the result).
+- ✅ The checker rejects every cheat we tried: rewritten SQL, an edited result, an
+  undeclared parameter, a false claimed value, and changed data. Injection through a
+  parameter value is harmless (values are bound, never pasted into the SQL).
 
-**8.2: Generate the bundle from dbt (1 day)**
-- A generator reads dbt's output files (`manifest.json`, `catalog.json`,
-  `run_results.json`, `sources.json`) and writes the bundle:
-  - one file per table (columns, tests and their latest results inside), linking to
-    the tables it's built from (lineage) and the tables it joins to
-  - `sources` = the real origin (Citi Bike feed, trip files, Open-Meteo)
-  - `generated` for text written by the generator, `verified` only for files a
-    person has reviewed (kept in a small list in the repo)
-  - `stale_after` from the freshness checks and the time each table was last built
-  - `index.md` per folder and a `log.md` of changes
-- Runs on GitHub after each warehouse build; the bundle is published with the data.
-- ⬜ Check: the bundle passes the validator; every mart and its lineage is present;
-  a stale table gets a past `stale_after`.
+### 8.4 MCP server ✅
+- ✅ Four tools: search, read a concept (with trust tier and staleness), list metrics,
+  run a metric. **No SQL tool.**
+- ✅ Tested end to end through the MCP server: an attested answer, warnings for stale
+  data and unverified definitions, refusals for unknown metrics and bad parameters.
+- ⬜ Not yet tried in your Claude Desktop. Setup guide: [AGENT.md](AGENT.md).
 
-**8.3: Approved metrics with receipts (1 day)**
-- 5–6 key metrics become Attested Computations, each a fixed, parameterised SQL
-  query: empty station-minutes, full station-minutes, likely van visits, recorder
-  coverage, riders affected (from verification), model error vs averages.
-- Running one returns the answer **plus a receipt**: which approved query (by its
-  fingerprint), the parameters, which version of the data, when, and by what.
-  Anyone can re-run it and check the receipt matches.
-- To keep laptops light, metrics read small daily summary tables (a new dbt model
-  per station per day), not the huge minute table.
-- ⬜ Check: a changed query no longer matches its approved fingerprint and is refused.
-
-**8.4: An agent that uses it (1 day)**
-- An **MCP server** (a standard plug-in for AI assistants) with tools to search
-  concepts, read a concept, and run an approved metric. No free-form SQL tool, so
-  the agent can't quietly make up its own definitions.
-- Works with Claude Desktop, which you already have. Every answer cites the concepts
-  and receipts it used, and flags anything stale or unverified.
-- ⬜ Check: asking for something with no approved metric gets "I can't answer that
-  reliably" instead of a guess.
-
-**8.5: Measure whether it helps (1 day)**
-- 25 questions with known answers, computed by script from the warehouse, not by hand.
-- Two versions of the same agent: **with** the OKF bundle and approved metrics, and
-  **without** (only table names and raw SQL access).
-- Score: correct answers (within a tolerance), correct citations, and whether stale
-  data was flagged.
-- ⬜ Check: a results table, with the questions and answers published, like Step 6's.
-
-**Total: about 5 days.**
-
-### Decisions needed from you
-1. **The eval (8.5) needs an Anthropic API key** to run the agent automatically on
-   GitHub. 25 questions × 2 versions should cost a few dollars per run. Without a key,
-   8.0–8.4 still work (you'd use the agent through Claude Desktop), but there's no
-   automatic "with vs without" number.
-2. **Scope:** all of 8.0–8.5, or a lighter first cut (8.0–8.3: documented warehouse,
-   bundle, and approved metrics) with the agent and eval later.
-
-### Risks
-- **The spec is new and may change.** The generator keeps the format in one place so
-  updates are cheap, and the bundle states which spec version it follows.
-- **The eval has only a few weeks of live data,** so questions are limited to the
-  recorded period. Results will be presented as "on this dataset", not a general claim.
-- **Agent answers can still be wrong.** The receipts make it checkable, which is the point.
+### 8.5 Eval ⬜ (built and tested; real run pending)
+- ✅ 25 questions with answers computed by script from the approved metrics: 21
+  answerable, 4 that should be declined ("How many riders were turned away?").
+- ✅ Two versions of the same agent: **with** the OKF tools, **without** (table names
+  plus raw SQL only). Scored on correct answers, correct declines, citing the
+  metric, and passing on warnings.
+- ✅ Tested with a fake Claude client (no cost): grading, the tool loop, refusals,
+  read-only SQL, and the report.
+- ✅ On GitHub, the 25 real questions and answers build correctly from the live data.
+- ⬜ **Real run:** needs an `ANTHROPIC_API_KEY` GitHub secret. Then
+  `gh workflow run eval.yml` writes `okf/EVAL.md`. Model: Claude Opus 5.5 by default
+  (`-f model=claude-sonnet-5-5` for about half the cost). Estimated cost: roughly
+  $5–10 per run on Opus 5.5 (50 agent runs, a few tool calls each). This is an
+  estimate, not measured yet.
+- **Found while testing:** whole numbers came back as "18.0", and the raw-SQL version's
+  table listing used a wrong column name, so it would have crashed in the real run.
+- **Known limit:** only one fully recorded day exists so far (Oct 20), so the
+  questions cover one or two days. More days give a broader test.

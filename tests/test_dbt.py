@@ -796,3 +796,36 @@ def test_eval_report_compares_the_arms(kb, built):
     md = report(questions, runs, "claude-opus-5-5")
     assert "| with okf | **4/4** | 3/3 | 1/1 | 3/3 |" in md
     assert "| without okf | **0/4** | 0/3 | 0/1 | 0/3 |" in md
+
+
+def test_two_different_days_when_available(kb, monkeypatch):
+    from rebalancer.okf import evaluate
+
+    rows = [
+        {
+            "local_date": "2026-10-19",
+            "coverage": 1.0,
+            "minutes_in_window": 300,
+            "minutes_recorded": 300,
+        },
+        {
+            "local_date": "2026-10-20",
+            "coverage": 1.0,
+            "minutes_in_window": 1440,
+            "minutes_recorded": 1440,
+        },
+        {
+            "local_date": "2026-10-21",
+            "coverage": 0.98,
+            "minutes_in_window": 1440,
+            "minutes_recorded": 1411,
+        },
+        {
+            "local_date": "2026-10-22",
+            "coverage": 1.0,
+            "minutes_in_window": 600,
+            "minutes_recorded": 600,
+        },
+    ]
+    monkeypatch.setattr(evaluate, "_metric", lambda *a, **k: rows)
+    assert evaluate.recorded_days(kb) == ["2026-10-21", "2026-10-20", "2026-10-22", "2026-10-19"]
