@@ -19,5 +19,5 @@ def test_real_app_builds_a_plan_with_the_model():
     metrics = {m.label: m.value for m in at.metric}
     print("\nMETRICS", metrics)
     print("CAPTION", [c.value for c in at.caption][1])
-    assert "Riders who'd miss out, no vans" in metrics
+    assert "Miss out, no vans" in metrics
     assert "Step 4 predictions" in [c.value for c in at.caption][1]

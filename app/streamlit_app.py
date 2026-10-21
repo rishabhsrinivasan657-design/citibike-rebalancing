@@ -81,9 +81,13 @@ except Exception as exc:  # show a friendly message rather than a stack trace
 s = result.score
 c1, c2, c3, c4 = st.columns(4)
 before, after = s["riders_affected_no_moves"], s["riders_affected_with_plan"]
-c1.metric("Riders who'd miss out, no vans", f"{before:.0f}")
+c1.metric(
+    "Miss out, no vans",
+    f"{before:.0f}",
+    help="Riders who'd find no bike or no free dock if no vans moved anything",
+)
 c2.metric(
-    "With this plan",
+    "Miss out, with plan",
     f"{after:.0f}",
     delta=f"{-(before - after):.0f}" if before else None,
     delta_color="inverse",
@@ -94,7 +98,8 @@ st.caption(
     f"{len(result.inst.stations)} stations in {zone.title()} at "
     f"{result.now_local:%a %b %d, %H:%M} New York time. Expected riders: "
     f'{result.demand_source}. "Miss out" = would find no bike or no free dock '
-    f"(estimate). Planned in {result.plan.solve_seconds:.1f} s."
+    f"(estimate). Planned in {result.plan.solve_seconds:.1f} s "
+    f"({result.plan.status.lower()})."
 )
 
 centre, _ = ZONES[zone]

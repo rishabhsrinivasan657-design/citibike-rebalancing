@@ -385,7 +385,7 @@ Step 4 instead of averages.
 ---
 
 ## Step 7: Finish and present
-**Status: done (Oct 20, 2026), app deployment pending**
+**Status: done (Oct 20, 2026)**
 
 - ✅ **Streamlit app**: live map of stations (empty / full / fine), the van plan as
   arcs, a move list, and the model's test results. Tested with fake data and against
@@ -393,5 +393,7 @@ Step 4 instead of averages.
 - ✅ **Weekly verification**: `verify.yml` replays every fully recorded weekday
   morning and commits [RESULTS.md](RESULTS.md).
 - ✅ **README** with a system diagram, results, what went wrong, and limits.
-- ⬜ App deployed on Streamlit Community Cloud (needs your sign-in).
+- ✅ App deployed: https://citibike-van-planner.streamlit.app. On Streamlit's free
+  servers the first plan took 25 s (vs 0.3–3 s on GitHub), so the app caps the solver
+  at 6 s and shows the best plan found, saying so in the caption.
 - Optional, not done: Slack alerts, Airflow DAG, Snowflake target, Terraform.

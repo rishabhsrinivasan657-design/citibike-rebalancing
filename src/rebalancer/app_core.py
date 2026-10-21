@@ -29,6 +29,7 @@ from rebalancer.planner.schedule import score
 
 NY = ZoneInfo("America/New_York")
 
+APP_SOLVER_LIMIT_S = 6
 GREEN, ORANGE, RED, GREY = [46, 160, 67], [230, 140, 20], [215, 48, 39], [150, 150, 150]
 
 
@@ -78,7 +79,9 @@ def live_plan(
     info, status = live
     start = now_local.replace(second=0, microsecond=0, tzinfo=None)
     day_type = day_type_of(start)
-    params = Params(vans=vans, horizon_min=float(minutes))
+    # Streamlit's free servers are much slower than GitHub's (25 s vs 0.3-3 s for the
+    # same Midtown plan), so cap the solver: it returns the best plan found so far.
+    params = Params(vans=vans, horizon_min=float(minutes), solver_time_limit_s=APP_SOLVER_LIMIT_S)
 
     rates, source = None, "12-month averages"
     if use_model:

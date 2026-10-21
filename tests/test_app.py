@@ -116,5 +116,5 @@ def test_streamlit_page_renders(monkeypatch):
     assert not at.exception, at.exception
     assert at.title[0].value.startswith("🚲 Citi Bike van planner")
     labels = [m.label for m in at.metric]
-    assert "Riders who'd miss out, no vans" in labels and "Van trips" in labels
+    assert "Miss out, no vans" in labels and "Van trips" in labels
     assert at.dataframe  # the move list
