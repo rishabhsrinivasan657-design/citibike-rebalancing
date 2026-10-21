@@ -326,3 +326,23 @@ def test_report_lists_tables_and_van_visits(built):
     assert "| fct_trips | 3 rides" in text
     assert "1 likely van visits (1 drop-offs)" in text
     assert "**Station A**: +18 bikes in 3 min (riders usually ~0.3)" in text
+
+
+def test_every_model_and_mart_column_is_documented(built):
+    """The OKF bundle (Step 8) is generated from these descriptions."""
+    import json
+
+    import pyarrow.dataset as pads
+
+    manifest = json.loads((built.parent / "target" / "manifest.json").read_text())
+    models = {n["name"]: n for n in manifest["nodes"].values() if n["resource_type"] == "model"}
+    undocumented = sorted(name for name, n in models.items() if not n["description"].strip())
+    assert not undocumented, f"models without a description: {undocumented}"
+
+    missing = []
+    for path in sorted(built.iterdir()):
+        name = path.name.removesuffix(".parquet")
+        actual = pads.dataset(path, format="parquet", partitioning="hive").schema.names
+        documented = {c for c, v in models[name]["columns"].items() if v["description"].strip()}
+        missing += [f"{name}.{c}" for c in actual if c not in documented]
+    assert not missing, f"mart columns without a description: {missing}"

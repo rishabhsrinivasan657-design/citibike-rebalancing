@@ -1,82 +1,297 @@
 version: 2
 
+# Descriptions here feed the OKF bundle (Step 8): every model and every mart column
+# must have one (enforced by tests/test_dbt.py). `meta.joins` says how tables join;
+# `meta.caveats` lists known quirks an analyst or agent must know.
+
 models:
+  # ---------------------------------------------------------------- staging
   - name: stg_trips
+    description: >
+      Citi Bike trips, one row per ride. Month-end rides appear in two monthly files;
+      the copy from the month the ride started is kept. Times are converted from New
+      York local time to UTC.
+    meta:
+      caveats:
+        - "On the night clocks go back, the repeated 1-2am hour is read as standard time, so ~480 rides a year end before they start."
+        - "About 0.02% of rides last over 24 hours (bikes not returned properly are closed out later)."
     columns:
       - name: ride_id
+        description: Citi Bike's unique ride identifier.
         tests: [unique, not_null]
       - name: started_at_local
+        description: Start time as published, New York local time without a time zone.
         tests: [not_null]
       - name: member_casual
+        description: "'member' (annual subscriber) or 'casual' (single ride or day pass)."
         tests:
           - accepted_values: {values: [member, casual]}
       - name: rideable_type
+        description: "'classic_bike' or 'electric_bike'."
         tests:
           - accepted_values:
               values: [classic_bike, electric_bike]
               config: {severity: warn}
 
   - name: stg_station_status
+    description: >
+      Live bike and dock counts from the recorder, deduplicated: overlapping recorder
+      runs write identical readings, so each distinct (station, report time, state)
+      is kept once, at its earliest observation.
     columns:
       - name: station_id
+        description: GBFS station UUID.
         tests: [not_null]
       - name: polled_at
+        description: When the recorder observed this reading (UTC).
         tests: [not_null]
+
+  - name: stg_station_information
+    description: Station list snapshots from the recorder (name, location, size, region).
+
+  - name: stg_poll_log
+    description: One row per recorder poll attempt, successful or not; the recorder's health log.
 
   - name: stg_weather
+    description: >
+      Hourly Central Park weather: what was observed and what had been forecast, side
+      by side (forecasts are what a live system would have known).
     columns:
       - name: hour_utc
+        description: The hour, in UTC.
         tests: [unique, not_null]
+
+  - name: stg_holidays
+    description: US federal and New York State holidays.
+
+  - name: stg_station_hour_profile
+    description: >
+      Average departures and arrivals per station (trip-file ID), day type and local
+      hour over the 12 months of trips. The baseline the demand model must beat.
+
+  # ----------------------------------------------------------- intermediate
+  - name: int_station_versions
+    description: >
+      Every distinct version of every station from the station-list log; a version
+      ends when the station changes or disappears from a later snapshot.
 
   - name: int_recorder_minute
+    description: One row per UTC minute from the first to the last poll, with whether the recorder was up.
     columns:
       - name: minute
+        description: The UTC minute.
         tests: [unique, not_null]
 
+  # ------------------------------------------------------------------ marts
   - name: dim_station
-    description: "Station history (SCD2). One row per station version."
+    description: >
+      Station history (SCD2): one row per station version, valid from `valid_from`
+      until `valid_to` (null while current). Built from the recorder's station-list log.
+    meta:
+      grain: one row per station version
+      joins:
+        - {to: fct_station_minute, using: station_id, note: "pick the version valid at the minute"}
+        - {to: fct_trips, using: "station_id = start_station_id / end_station_id"}
+        - {to: fct_inferred_rebalancing, using: station_id}
+      caveats:
+        - "History only goes back to when recording began (2026-10-19); stations removed earlier are absent."
     columns:
       - name: station_id
+        description: GBFS station UUID, stable across versions.
         tests: [not_null]
-      - name: valid_from
-        tests: [not_null]
+      - name: short_name
+        description: Citi Bike's station code (e.g. '6140.05'); the ID used in trip files. Text, not a number.
+      - name: name
+        description: Station name, usually its street corner.
+      - name: lat
+        description: Latitude.
+      - name: lon
+        description: Longitude.
+      - name: region_id
+        description: "Region: 71 NYC, 185 Bronx, 70 Jersey City, 311 Hoboken; other values are internal."
       - name: capacity
+        description: Number of docks.
         tests:
           - within_range: {min_value: 0}
+      - name: station_type
+        description: Citi Bike's station type label.
+      - name: has_kiosk
+        description: Whether the station has a payment kiosk.
+      - name: content_hash
+        description: Hash of the descriptive fields; a change starts a new version.
+      - name: valid_from
+        description: When this version was first observed (UTC).
+        tests: [not_null]
+      - name: valid_to
+        description: When this version stopped being current (UTC); null if still current.
+      - name: is_current
+        description: True for the version in effect now.
 
   - name: fct_trips
-    description: "Every ride once, with local and UTC times and GBFS station IDs."
+    description: >
+      Every ride once (Oct 2025 – Sep 2026 so far), with New York and UTC times, ride
+      length, and the GBFS station each end used. Partitioned by month.
+    meta:
+      grain: one row per ride
+      joins:
+        - {to: dim_station, using: "start_station_id = station_id (and end_station_id)", note: "use is_current = true"}
+      caveats:
+        - "Trip files are published monthly with a 2-3 week lag; October 2026 isn't in yet."
+        - "~1.6% of rides start at stations removed before recording began; their start_station_id is null."
     columns:
       - name: ride_id
+        description: Citi Bike's unique ride identifier.
         tests: [unique, not_null]
+      - name: rideable_type
+        description: "'classic_bike' or 'electric_bike'."
+      - name: member_casual
+        description: "'member' or 'casual'."
+      - name: started_at_local
+        description: Start, New York local time.
+      - name: ended_at_local
+        description: End, New York local time.
+      - name: started_at_utc
+        description: Start, UTC.
+      - name: ended_at_utc
+        description: End, UTC.
+      - name: duration_min
+        description: Ride length in minutes.
+      - name: start_short_name
+        description: Start station code as published in the trip file.
+      - name: start_station_name
+        description: Start station name as published.
+      - name: end_short_name
+        description: End station code as published.
+      - name: end_station_name
+        description: End station name as published.
+      - name: start_lat
+        description: Start latitude.
+      - name: start_lng
+        description: Start longitude.
+      - name: end_lat
+        description: End latitude.
+      - name: end_lng
+        description: End longitude.
+      - name: month
+        description: "Month the ride started, 'YYYY-MM' (the partition key)."
       - name: start_station_id
-        description: "Null when the station was removed before recording began (~1.6%)."
+        description: GBFS station UUID of the start station; null when the station was removed before recording began.
         tests:
           - relationships:
               to: ref('dim_station')
               field: station_id
               config: {where: "start_station_id is not null"}
+      - name: end_station_id
+        description: GBFS station UUID of the end station; null when unknown.
 
   - name: fct_station_minute
-    description: "Bikes and docks at every station for every recorded minute."
+    description: >
+      Bikes and docks at every station for every recorded minute: the latest reading
+      observed by the end of each minute, carried forward between readings.
+    meta:
+      grain: one row per station per UTC minute
+      joins:
+        - {to: dim_station, using: station_id, note: "version valid at the minute"}
+        - {to: fct_recorder_minute, using: minute}
+      caveats:
+        - "When recorder_up is false the values are carried forward, not observed."
+        - "Grows by about 3.6 million rows a day; query a date range, or use agg_station_day."
     columns:
       - name: station_id
+        description: GBFS station UUID.
         tests: [not_null]
       - name: minute
+        description: The UTC minute; values are as of the end of this minute.
         tests: [not_null]
+      - name: recorder_up
+        description: Whether the recorder had a successful poll in this minute.
       - name: num_bikes_available
+        description: Bikes ready to rent (classic and electric).
         tests:
           - not_null
           - within_range: {min_value: 0}
+      - name: num_ebikes_available
+        description: Electric bikes ready to rent (included in num_bikes_available).
+      - name: num_bikes_disabled
+        description: Broken or reserved bikes in docks.
       - name: num_docks_available
+        description: Free docks a rider can return a bike to.
         tests:
           - within_range: {min_value: 0}
+      - name: num_docks_disabled
+        description: Docks out of service.
+      - name: is_renting
+        description: Whether the station lets riders take bikes.
+      - name: is_returning
+        description: Whether the station accepts returns.
+      - name: last_reported
+        description: When the station itself last reported (UTC).
+      - name: observed_at
+        description: When the reading in effect was observed by the recorder (UTC).
+      - name: capacity
+        description: Number of docks, from the station version valid at this minute.
+      - name: minutes_since_observed
+        description: Minutes since the reading in effect was observed.
+      - name: is_empty
+        description: "No bikes available and the station is renting: a rider would find no bike."
+      - name: is_full
+        description: "No free docks and the station is accepting returns: a rider couldn't park."
+      - name: is_stale
+        description: The recorder was up but the station hasn't reported for over 20 minutes.
 
   - name: fct_inferred_rebalancing
-    description: "Likely Lyft van visits detected from sudden jumps in bike counts."
+    description: >
+      Likely Lyft van visits: one-way jumps in a station's bikes too large for riders
+      at that station and hour (Poisson chance under 0.001 even on a busy day), of at
+      least 7 bikes. Rule v3; see docs/DESIGN.md.
+    meta:
+      grain: one row per detected visit
+      joins:
+        - {to: dim_station, using: station_id}
+        - {to: fct_station_minute, using: "station_id, minute between started_minute and ended_minute"}
+      caveats:
+        - "Jersey City and Hoboken are excluded (their trips aren't downloaded, so their normal busyness is unknown)."
+        - "Inferred, not observed: hand-checked on 10 samples; final check against October trips in mid-November 2026."
     columns:
+      - name: station_id
+        description: GBFS station UUID.
+      - name: started_minute
+        description: First minute of the visit (UTC).
+      - name: ended_minute
+        description: Last minute of the visit (UTC).
+      - name: minutes
+        description: Minutes of one-way change that make up the visit.
       - name: bikes_change
+        description: Net change in bikes (available + disabled); positive = drop-off.
         tests: [not_null]
       - name: action
+        description: "'drop_off' or 'pick_up'."
         tests:
           - accepted_values: {values: [drop_off, pick_up]}
+      - name: day_type
+        description: "'weekday' or 'weekend' (holidays count as weekend)."
+      - name: local_hour
+        description: New York hour the visit started.
+      - name: expected_riders
+        description: Bikes riders would normally take (or return) at this station in that many minutes.
+      - name: p_riders
+        description: Poisson chance riders alone caused the change, on a day twice as busy as usual.
+      - name: runs_merged
+        description: Runs of minutes merged into this visit (a rider mid-visit splits a run).
+
+  - name: fct_recorder_minute
+    description: Recording health; one row per UTC minute with whether any status poll succeeded.
+    meta:
+      grain: one row per UTC minute
+      joins:
+        - {to: fct_station_minute, using: minute}
+    columns:
+      - name: minute
+        description: The UTC minute.
+      - name: n_polls
+        description: Successful status polls in this minute (2 when recorder runs overlap).
+      - name: recorder_up
+        description: True if at least one poll succeeded.
+
+# Note: avoid bare `on:` / `yes:` / `no:` keys in this file; YAML 1.1 reads them as
+# booleans (a `meta.joins` key `on` once froze dbt). Joins use `using:`.
