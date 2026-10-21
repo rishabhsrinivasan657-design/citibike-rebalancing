@@ -6,7 +6,7 @@ This project records the whole system minute by minute, predicts which stations 
 run out or fill up in the next hour, plans van moves to prevent it, and **verifies the
 plans against what really happened** on recorded mornings.
 
-**Live app:** https://citibike-van-planner.streamlit.app · **Results:** [docs/RESULTS.md](docs/RESULTS.md)
+**User manual:** [docs/USER_MANUAL.md](docs/USER_MANUAL.md) · **Live app:** https://citibike-van-planner.streamlit.app · **Results:** [docs/RESULTS.md](docs/RESULTS.md)
 (updated weekly by a GitHub job)
 
 ## How it works

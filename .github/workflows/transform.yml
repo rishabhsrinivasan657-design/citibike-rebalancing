@@ -21,6 +21,7 @@ env:
   MARTS_ROOT: ${{ github.workspace }}/work/marts
   DBT_PROFILES_DIR: ${{ github.workspace }}/transform
   DBT_DUCKDB_PATH: ${{ github.workspace }}/work/warehouse.duckdb
+  OKF_DATA_URI: ${{ vars.OKF_DATA_URI }}  # optional; see docs/USER_MANUAL.md
   DUCKDB_MEMORY_LIMIT: 10GB
   DUCKDB_THREADS: "4"
 

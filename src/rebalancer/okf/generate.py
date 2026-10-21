@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import shutil
 from dataclasses import dataclass, field
@@ -27,7 +28,9 @@ LAYERS = {"marts": "Mart", "intermediate": "Intermediate table", "staging": "Sta
 # rebuild is missed; one built only from monthly trip files lasts until next month.
 LIVE_STALE = timedelta(hours=7)
 HISTORY_STALE = timedelta(days=35)
-HF_HISTORY = "hf://datasets/RokuRocks/citibike-history"
+# Where the marts live, used as each table concept's `resource`. Set OKF_DATA_URI to
+# your own dataset when running this project under another Hugging Face account.
+HF_HISTORY = os.environ.get("OKF_DATA_URI") or "hf://datasets/RokuRocks/citibike-history"
 
 
 def iso(t: datetime) -> str:
