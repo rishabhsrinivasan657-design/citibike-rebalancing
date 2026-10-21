@@ -45,6 +45,7 @@ okf-generate = "rebalancer.okf.generate:main"
 okf-metric = "rebalancer.okf.attest:main"
 okf-mcp = "rebalancer.okf.server:main"
 okf-sync = "rebalancer.okf.server:main_sync"
+okf-eval = "rebalancer.okf.evaluate:main"
 forecast-train = "rebalancer.forecast.train:main"
 
 [project.optional-dependencies]
@@ -53,6 +54,7 @@ app = [
     "streamlit>=1.39",
 ]
 agent = [
+    "anthropic>=1.0",
     "mcp>=2.0",
 ]
 
@@ -69,6 +71,10 @@ target-version = "py312"
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "B", "UP", "SIM"]
+
+[tool.ruff.lint.per-file-ignores]
+# Eval question texts and tool descriptions read best as single long strings.
+"src/rebalancer/okf/evaluate.py" = ["E501"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

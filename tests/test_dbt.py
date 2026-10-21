@@ -657,3 +657,142 @@ def test_mcp_server_exposes_only_the_four_tools(kb):
     payload = json.loads(result.content[0].text)
     assert not result.is_error and payload["ok"] is True
     assert payload["result"][0]["coverage"] == 0.7273
+
+
+# ------------------------------------------------------------------- 8.5: eval
+class FakeClient:
+    """Stands in for anthropic.Anthropic(): scripted replies, no network."""
+
+    def __init__(self, script):
+        self.script = script  # function(kwargs, turn) -> (stop_reason, blocks)
+        self.calls = []
+        self.beta = self
+        self.messages = self
+
+    def create(self, **kwargs):
+        from types import SimpleNamespace
+
+        turn = sum(1 for m in kwargs["messages"] if m["role"] == "assistant")
+        self.calls.append(kwargs)
+        stop, blocks = self.script(kwargs, turn)
+        return SimpleNamespace(stop_reason=stop, content=blocks)
+
+
+def text(t):
+    from types import SimpleNamespace
+
+    return SimpleNamespace(type="text", text=t)
+
+
+def tool(name, args, i="t1"):
+    from types import SimpleNamespace
+
+    return SimpleNamespace(type="tool_use", id=i, name=name, input=args)
+
+
+def test_questions_have_known_answers(kb, built):
+    from rebalancer.okf.evaluate import build_questions
+
+    qs = {q.id: q for q in build_questions(kb, built)}
+    assert len(qs) == 25 and sum(q.kind == "decline" for q in qs.values()) == 4
+    assert qs["empty-midtown-d1"].expected == ["Station E"]
+    assert qs["empty-midtown-d1-minutes"].expected == 8
+    assert qs["coverage-d1"].expected == 0.7273
+    assert qs["vans-bikes-all-d1"].expected == 18
+    assert qs["busiest-williamsburg-last"].expected == ["none"]  # no test stations there
+    assert "2026-10-20" in qs["empty-midtown-d1"].text
+
+
+def test_grading_rules():
+    from rebalancer.okf.evaluate import Question, final_answer, grade
+
+    st = Question("s", "?", "station", ["W 52 St & 6 Ave"])
+    assert grade(st, "w 52 st & 6 ave") and grade(st, "The answer is W 52 St & 6 Ave.")
+    assert not grade(st, "W 53 St & 6 Ave") and not grade(st, None)
+    n = Question("n", "?", "number", 18.0)
+    assert grade(n, "18 bikes") and grade(n, "18.4") and not grade(n, "19")
+    sh = Question("c", "?", "share", 0.7273)
+    assert grade(sh, "0.727") and grade(sh, "72.7%") and not grade(sh, "0.70")
+    dec = Question("d", "?", "decline", None)
+    assert grade(dec, "CANNOT_ANSWER") and not grade(dec, "42")
+    assert not grade(n, "CANNOT_ANSWER")
+    assert final_answer("blah\nANSWER: first\nmore\nANSWER: 18") == "18"
+
+
+def test_tool_loop_runs_an_approved_metric_then_answers(kb):
+    import json
+
+    from rebalancer.okf.evaluate import OkfArm, ask, okf_tools
+
+    def script(kwargs, turn):
+        if turn == 0:
+            return "tool_use", [
+                tool(
+                    "run_metric",
+                    {
+                        "computation": "computations/van-activity",
+                        "parameters": {
+                            "start_date": "2026-10-20",
+                            "end_date": "2026-10-20",
+                            "zone": "all",
+                        },
+                    },
+                )
+            ]
+        result = json.loads(kwargs["messages"][-1]["content"][0]["content"])
+        n = result["result"][0]["bikes_dropped_off"]
+        return "end_turn", [text(f"Per computations/van-activity.\nANSWER: {n}")]
+
+    client = FakeClient(script)
+    arm = OkfArm(kb)
+    out, calls, refused = ask(client, "claude-opus-5-5", "sys", okf_tools(), arm, "How many?")
+    assert out.endswith("ANSWER: 18") and calls == 1 and not refused
+    assert arm.saw_warnings  # the computation is unverified
+    sent = client.calls[0]
+    assert sent["model"] == "claude-opus-5-5" and sent["fallbacks"] == "default"
+    assert sent["cache_control"] == {"type": "ephemeral"}
+    assert "tool_choice" not in sent  # forced tool use isn't allowed on this model
+
+
+def test_refusal_is_recorded(kb):
+    from rebalancer.okf.evaluate import OkfArm, ask, okf_tools
+
+    client = FakeClient(lambda kw, t: ("refusal", []))
+    assert ask(client, "m", "s", okf_tools(), OkfArm(kb), "q") == ("", 0, True)
+
+
+def test_sql_arm_is_read_only(built):
+    import json
+
+    from rebalancer.okf.evaluate import SqlArm
+
+    arm = SqlArm(built)
+    assert "agg_station_day" in json.loads(arm.call("list_tables", {}))
+    rows = json.loads(arm.call("run_sql", {"query": "SELECT count(*) AS n FROM dim_zone"}))
+    assert rows == [{"n": 4}]
+    assert "read-only" in arm.call("run_sql", {"query": "DROP VIEW dim_zone"})
+    assert "error" in json.loads(arm.call("run_sql", {"query": "SELECT nope"}))
+
+
+def test_eval_report_compares_the_arms(kb, built):
+    from rebalancer.okf.evaluate import build_questions, report, run_eval
+
+    questions = build_questions(kb, built)[:3] + build_questions(kb, built)[-1:]
+    expected = {q.text: q for q in questions}
+
+    def script(kwargs, turn):
+        q = expected[kwargs["messages"][0]["content"]]
+        with_okf = any(t["name"] == "run_metric" for t in kwargs["tools"])
+        if q.kind == "decline":
+            ans = "CANNOT_ANSWER" if with_okf else "42"
+        elif with_okf:
+            ans = q.expected[0] if isinstance(q.expected, list) else str(q.expected)
+        else:
+            ans = "Somewhere else"
+        cite = f" via {q.metric}" if with_okf and q.metric else ""
+        return "end_turn", [text(f"Answer{cite}.\nANSWER: {ans}")]
+
+    runs = run_eval(FakeClient(script), kb, built, questions, "claude-opus-5-5", workers=2)
+    md = report(questions, runs, "claude-opus-5-5")
+    assert "| with okf | **4/4** | 3/3 | 1/1 | 3/3 |" in md
+    assert "| without okf | **0/4** | 0/3 | 0/1 | 0/3 |" in md

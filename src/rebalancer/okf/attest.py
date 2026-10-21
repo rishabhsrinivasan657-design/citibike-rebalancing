@@ -137,8 +137,11 @@ def data_revision(data: Path, tables: list[str]) -> str:
 def _jsonable(v):
     if isinstance(v, (date, datetime)):
         return v.isoformat()
+    # DuckDB sums arrive as DECIMAL or DOUBLE; keep whole numbers whole ("18", not "18.0")
     if isinstance(v, Decimal):
-        return float(v)
+        return int(v) if v == v.to_integral_value() else float(v)
+    if isinstance(v, float) and v.is_integer():
+        return int(v)
     return v
 
 

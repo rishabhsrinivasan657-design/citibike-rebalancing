@@ -1,0 +1,50 @@
+# Step 8.5: does the OKF bundle help an agent answer correctly? Runs the same Claude
+# model on the same questions with and without the bundle's tools, and saves
+# okf/EVAL.md. Costs real API money (see docs/PLAN.md, Step 8.5). Start it with:
+#   gh workflow run eval.yml                          # Claude Opus 5.5
+#   gh workflow run eval.yml -f model=claude-sonnet-5-5
+name: eval
+
+on:
+  workflow_dispatch:
+    inputs:
+      model:
+        description: "Claude model for both arms"
+        default: "claude-opus-5-5"
+
+permissions:
+  contents: write # commits okf/EVAL.md
+
+jobs:
+  eval:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      HF_TOKEN: ${{ secrets.HF_TOKEN }}
+      HF_HISTORY_REPO: ${{ vars.HF_HISTORY_REPO || 'citibike-history' }}
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: astral-sh/setup-uv@v6
+      - run: uv sync --frozen --no-dev --extra agent
+      - name: Download the bundle and the small tables
+        run: uv run okf-sync --dest work/okfcache
+      - name: Questions and expected answers (no API calls)
+        run: uv run okf-eval --bundle work/okfcache/okf --data work/okfcache/marts --questions-only
+      - name: Check the API key is set
+        run: |
+          if [ -z "$ANTHROPIC_API_KEY" ]; then
+            echo "::error::Add an ANTHROPIC_API_KEY repository secret first (Settings > Secrets and variables > Actions)."
+            exit 1
+          fi
+      - name: Run the eval
+        run: |
+          uv run okf-eval --bundle work/okfcache/okf --data work/okfcache/marts \
+            --out okf/EVAL.md --model "${{ inputs.model }}" | tee -a "$GITHUB_STEP_SUMMARY"
+      - name: Save the results to the repository
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add okf/EVAL.md okf/EVAL.json
+          git commit -m "Update OKF eval results (${{ inputs.model }})" || echo "No change."
+          git pull --rebase && git push
