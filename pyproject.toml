@@ -46,6 +46,7 @@ okf-metric = "rebalancer.okf.attest:main"
 okf-mcp = "rebalancer.okf.server:main"
 okf-sync = "rebalancer.okf.server:main_sync"
 okf-eval = "rebalancer.okf.evaluate:main"
+okf-pitfalls = "rebalancer.okf.pitfalls:main"
 forecast-train = "rebalancer.forecast.train:main"
 
 [project.optional-dependencies]
@@ -75,6 +76,7 @@ select = ["E", "F", "I", "B", "UP", "SIM"]
 [tool.ruff.lint.per-file-ignores]
 # Eval question texts and tool descriptions read best as single long strings.
 "src/rebalancer/okf/evaluate.py" = ["E501"]
+"src/rebalancer/okf/pitfalls.py" = ["E501"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

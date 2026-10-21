@@ -1,0 +1,36 @@
+# Step 8.6: trap analysis. How wrong do answers get with common mistakes, compared
+# with the approved metrics? No AI and no API key needed. Weekly, or by hand:
+#   gh workflow run pitfalls.yml
+name: pitfalls
+
+on:
+  schedule:
+    - cron: "30 14 * * 2"
+  workflow_dispatch:
+
+permissions:
+  contents: write # commits okf/PITFALLS.md
+
+jobs:
+  pitfalls:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      HF_TOKEN: ${{ secrets.HF_TOKEN }}
+      HF_HISTORY_REPO: ${{ vars.HF_HISTORY_REPO || 'citibike-history' }}
+      DUCKDB_MEMORY_LIMIT: 10GB
+    steps:
+      - uses: actions/checkout@v5
+      - uses: astral-sh/setup-uv@v6
+      - run: uv sync --frozen --no-dev --extra agent
+      - name: Download the bundle and tables (including the minute table)
+        run: uv run okf-sync --dest work/okfcache --with-minutes
+      - name: Run the trap analysis
+        run: uv run okf-pitfalls --bundle work/okfcache/okf --data work/okfcache/marts --out okf/PITFALLS.md
+      - name: Save the results to the repository
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add okf/PITFALLS.md
+          git commit -m "Update trap analysis" || echo "No change."
+          git pull --rebase && git push

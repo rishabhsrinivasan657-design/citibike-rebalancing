@@ -829,3 +829,86 @@ def test_two_different_days_when_available(kb, monkeypatch):
     ]
     monkeypatch.setattr(evaluate, "_metric", lambda *a, **k: rows)
     assert evaluate.recorded_days(kb) == ["2026-10-21", "2026-10-20", "2026-10-22", "2026-10-19"]
+
+
+# ------------------------------------------------------- 8.6: trap analysis (no AI)
+def test_traps_change_answers_exactly_as_hand_worked(kb, built):
+    from rebalancer.okf.pitfalls import build_cases, changed, report
+
+    cases = {c.question: c for c in build_cases(kb, built)}
+    empty = cases["Station empty longest, midtown, 2026-10-20"]
+    assert empty.correct == ["Station E"] and empty.correct_value == 8
+    # Station E was also empty during the 3 minutes the recorder was down
+    assert empty.traps["count_recorder_down"] == (["Station E"], 11.0)
+    assert changed(empty, "count_recorder_down")
+    # The test data sits at 8am New York time, so UTC dates agree; every station rents
+    assert not changed(empty, "utc_dates") and not changed(empty, "ignore_renting")
+
+    cov = cases["Recorder coverage, 2026-10-20"]
+    assert cov.correct == 0.7273 and cov.traps["minutes_with_data"][0] == 1.0
+
+    drops = cases["Van drop-off visits, midtown, 2026-10-20"]
+    # approved rule: 1 (station A); simple rule also counts A's split visit twice,
+    # the busy station B's riders, and the Jersey City station J
+    assert drops.correct == 1 and drops.traps["simple_van_rule"][0] == 4
+    bikes = cases["Bikes dropped off by vans, all, 2026-10-20"]
+    assert bikes.correct == 18 and bikes.traps["simple_van_rule"][0] == 34
+
+    busiest = next(c for q, c in cases.items() if q.startswith("Busiest station, all"))
+    assert not changed(busiest, "numeric_station_codes")  # no codes collide here
+
+    md = report(list(cases.values()))
+    assert "| Counting minutes when the recorder was down | **" in md
+    assert "Station E (8)" in md and "Station E (11)" in md
+
+
+def test_numeric_station_codes_merge_different_stations(tmp_path):
+    import pyarrow as pa
+    import pyarrow.parquet as pq
+
+    from rebalancer.okf.pitfalls import Traps
+
+    pq.write_table(
+        pa.table(
+            {
+                "short_name": ["6131.1", "6131.10", "7000.01"],
+                "month": ["2026-09"] * 3,
+                "station_name": ["E 24 St & Park Ave S", "Somewhere Else", "Big Station"],
+                "lat": [40.74] * 3,
+                "lon": [-73.98] * 3,
+                "rides_started": [400, 300, 600],
+                "rides_ended": [0, 0, 0],
+            }
+        ),
+        tmp_path / "agg_station_month.parquet",
+    )
+    pq.write_table(
+        pa.table(
+            {
+                "zone": ["midtown"],
+                "center_lat": [40.75],
+                "center_lon": [-73.98],
+                "radius_m": [5000],
+                "description": ["x"],
+            }
+        ),
+        tmp_path / "dim_zone.parquet",
+    )
+    for name in ("fct_station_minute", "dim_station"):
+        pq.write_table(
+            pa.table(
+                {
+                    "station_id": ["x"],
+                    "is_current": [True],
+                    "name": ["x"],
+                    "lat": [0.0],
+                    "lon": [0.0],
+                    "region_id": ["71"],
+                    "minute": pa.array([None], pa.timestamp("us", tz="UTC")),
+                }
+            ),
+            tmp_path / f"{name}.parquet",
+        )
+    names, rides = Traps(tmp_path).busiest_numeric_codes("2026-09", "2026-09", "all")
+    # 6131.1 and 6131.10 both become 6131.1: 700 rides beat the real busiest (600)
+    assert rides == 700 and names[0] in ("E 24 St & Park Ave S", "Somewhere Else")

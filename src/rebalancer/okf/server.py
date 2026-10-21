@@ -65,8 +65,9 @@ def build_server(kb: KnowledgeBase):
     return server
 
 
-def sync(dest: Path) -> None:
-    """Download the bundle and the small marts the metrics read."""
+def sync(dest: Path, with_minutes: bool = False) -> None:
+    """Download the bundle and the small marts the metrics read. with_minutes adds the
+    large minute table and station history (for the trap analysis; use on GitHub)."""
     from huggingface_hub import HfApi, snapshot_download
 
     from rebalancer.ingest.recorder import resolve_repo_id
@@ -82,7 +83,15 @@ def sync(dest: Path) -> None:
         repo_type="dataset",
         token=token,
         local_dir=dest,
-        allow_patterns=["okf/**", *[f"marts/{m}.parquet" for m in MARTS]],
+        allow_patterns=[
+            "okf/**",
+            *[f"marts/{m}.parquet" for m in MARTS],
+            *(
+                ["marts/fct_station_minute.parquet", "marts/dim_station.parquet"]
+                if with_minutes
+                else []
+            ),
+        ],
     )
     print(f"bundle and marts saved to {dest}")
 
@@ -100,7 +109,13 @@ def main() -> None:
 def main_sync() -> None:
     parser = argparse.ArgumentParser(description="Download the OKF bundle and small marts.")
     parser.add_argument("--dest", type=Path, default=CACHE)
-    sync(parser.parse_args().dest)
+    parser.add_argument(
+        "--with-minutes",
+        action="store_true",
+        help="also the large minute table (hundreds of MB; for GitHub)",
+    )
+    args = parser.parse_args()
+    sync(args.dest, args.with_minutes)
 
 
 if __name__ == "__main__":

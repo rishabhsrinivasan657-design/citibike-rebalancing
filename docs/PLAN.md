@@ -475,3 +475,26 @@ been reviewed.
   table listing used a wrong column name, so it would have crashed in the real run.
 - **Known limit:** only one fully recorded day exists so far (Oct 20), so the
   questions cover one or two days. More days give a broader test.
+
+### 8.6 Trap analysis (free, no AI) ⬜
+There's no Anthropic API key yet, so as a free first measurement we test the **traps**
+the context layer protects against, instead of testing an agent. For each eval question
+we compute the correct answer (approved metric) and the answer you'd get from a common
+mistake made without the bundle's definitions:
+
+| Mistake | What goes wrong |
+|---|---|
+| Using UTC dates | Days end at 8pm New York time instead of midnight |
+| Counting minutes when the recorder was down | Carried-forward values count as observed |
+| Ignoring "is the station renting?" | Closed or broken stations count as empty |
+| Ignoring "does the station accept returns?" | Out-of-service docks count as full |
+| "Minutes with data" as coverage | Carried-forward rows make coverage look like 100% |
+| A simple "6+ bikes in 3 minutes" van rule | Rush-hour riders and Jersey City count as vans |
+| Station codes as numbers | `6131.1` and `6131.10` merge into one station |
+
+**Checks**
+- ⬜ Known-answer tests: each mistake changes (or doesn't change) the answer exactly as
+  hand-worked on the test data.
+- ⬜ A report on the real data (okf/PITFALLS.md): for each mistake, how many questions'
+  answers change and by how much.
+- This measures the traps, not an agent. The agent eval (8.5) is still the direct test.
