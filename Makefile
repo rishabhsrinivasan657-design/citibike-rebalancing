@@ -31,4 +31,4 @@ logs:
 
 
 test-dbt:
-	uv run --group transform pytest -m dbt
+	uv run --group transform --extra agent pytest -m dbt

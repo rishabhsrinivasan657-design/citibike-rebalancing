@@ -43,12 +43,17 @@ backtest-all = "rebalancer.backtest.run:main_all"
 okf-validate = "rebalancer.okf.validate:main"
 okf-generate = "rebalancer.okf.generate:main"
 okf-metric = "rebalancer.okf.attest:main"
+okf-mcp = "rebalancer.okf.server:main"
+okf-sync = "rebalancer.okf.server:main_sync"
 forecast-train = "rebalancer.forecast.train:main"
 
 [project.optional-dependencies]
 app = [
     "pydeck>=0.9",
     "streamlit>=1.39",
+]
+agent = [
+    "mcp>=2.0",
 ]
 
 [build-system]

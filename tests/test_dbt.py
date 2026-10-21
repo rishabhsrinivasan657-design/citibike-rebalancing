@@ -571,3 +571,89 @@ def test_changed_data_cannot_be_reproduced(bundle, built, tmp_path):
     pq.write_table(t.slice(0, t.num_rows - 1), copy_dir / "fct_recorder_minute.parquet")
     verdict = attest(out, receipt, copy_dir)
     assert not verdict["ok"] and verdict["checks"]["same_data"] is False
+
+
+# ------------------------------------------------------------- 8.4: knowledge + MCP
+@pytest.fixture(scope="module")
+def kb(bundle, built):
+    from rebalancer.okf.knowledge import KnowledgeBase
+
+    out, _ = bundle
+    return KnowledgeBase(out, built)
+
+
+def test_search_finds_metrics_and_glossary(kb):
+    hits = [h["id"] for h in kb.search("which stations ran empty")]
+    assert "metrics/empty-minutes" in hits[:5] or "computations/empty-stations" in hits[:5]
+    vans = [h["id"] for h in kb.search("van rebalancing", type="Glossary Term")]
+    assert vans and vans[0] == "glossary/van-visit"
+
+
+def test_read_reports_trust_and_staleness(kb):
+    table = kb.read("tables/agg_station_day")
+    assert table["trust"] == "machine-confirmed"  # every dbt test on it passed
+    assert table["stale"] is False and "# Schema" in table["text"]
+    assert kb.read("/glossary/van-visit.md")["trust"] == "unverified"
+    assert kb.read("sources/live__poll_log")["stale"] is True  # fixture data is old
+    with pytest.raises(KeyError, match="no concept"):
+        kb.read("tables/nope")
+
+
+def test_run_metric_returns_an_attested_answer_with_warnings(kb):
+    out = kb.run_metric(
+        "empty-stations",
+        {"start_date": "2026-10-20", "end_date": "2026-10-20", "zone": "midtown", "top_n": 1},
+    )
+    assert out["ok"] and out["verdict"]["checks"]["reproduces"] is True
+    assert out["result"][0]["station_name"] == "Station E"
+    assert len(out["receipt"]["result_sha256"]) == 16
+    assert any("not been verified" in w for w in out["warnings"])
+
+
+def test_stale_data_is_flagged(bundle, built):
+    from datetime import UTC, datetime
+
+    from rebalancer.okf.knowledge import KnowledgeBase
+
+    later = KnowledgeBase(bundle[0], built, now=datetime(2030, 1, 1, tzinfo=UTC))
+    out = later.run_metric(
+        "computations/van-activity",
+        {"start_date": "2026-10-20", "end_date": "2026-10-20", "zone": "all"},
+    )
+    assert out["ok"]
+    assert any("tables/agg_station_day is stale" in w for w in out["warnings"])
+    assert any("past its review date" in w for w in out["warnings"])
+
+
+def test_unknown_metric_or_bad_parameters_are_refused(kb):
+    assert "no approved metric" in kb.run_metric("computations/raw-sql", {})["error"]
+    bad = kb.run_metric(
+        "empty-stations", {"start_date": "2026-10-20", "end_date": "x", "zone": "all", "top_n": 3}
+    )
+    assert not bad["ok"] and "not a valid date" in bad["error"]
+
+
+def test_mcp_server_exposes_only_the_four_tools(kb):
+    import asyncio
+    import json
+
+    pytest.importorskip("mcp")
+    from rebalancer.okf.server import build_server
+
+    server = build_server(kb)
+    tools = asyncio.run(server.list_tools())
+    names = sorted(t.name for t in tools)
+    assert names == ["list_metrics", "read_concept", "run_metric", "search_concepts"]
+    assert not any("sql" in n or "query" in n for n in names)
+    result = asyncio.run(
+        server.call_tool(
+            "run_metric",
+            {
+                "computation": "computations/recorder-coverage",
+                "parameters": {"start_date": "2026-10-20", "end_date": "2026-10-20"},
+            },
+        )
+    )
+    payload = json.loads(result.content[0].text)
+    assert not result.is_error and payload["ok"] is True
+    assert payload["result"][0]["coverage"] == 0.7273
