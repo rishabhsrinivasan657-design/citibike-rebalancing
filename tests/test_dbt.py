@@ -143,6 +143,9 @@ def write_lake(lake: Path) -> None:
             info("J", "2.01", 30, T0, region="70"),  # Jersey City
             info("J", "2.01", 30, t1, region="70"),
             info("J", "2.01", 30, t2, region="70"),
+            info("E", "1.05", 20, T0),  # empty the whole time
+            info("E", "1.05", 20, t1),
+            info("E", "1.05", 20, t2),
         ],
     )
 
@@ -178,6 +181,7 @@ def write_lake(lake: Path) -> None:
         status("B", 3, 16, 4, run_offset_s=20),  # same reading from an overlapping run
         status("J", 1, 5, 25),
         status("J", 3, 15, 15),  # Jersey City +10: skipped, no reliable profile there
+        status("E", 0, 0, 20),  # empty from the start
         status("A", 9, 13, 17),  # after the recorder gap at minutes 6-8
     ]
     w.write("station_status", rows)
@@ -432,13 +436,138 @@ def test_stale_source_is_marked_stale_and_not_verified(bundle):
     assert "status **error**" in (out / "sources" / "live__poll_log.md").read_text()
 
 
-def test_glossary_and_indexes_are_included(bundle):
+def test_glossary_and_indexes_are_included(built, bundle):
     out, _ = bundle
     root_index = (out / "index.md").read_text()
     assert root_index.startswith('---\nokf_version: "0.2"\n---')
     assert "[glossary](glossary/index.md)" in root_index
     assert (out / "glossary" / "riders-affected.md").exists()
-    tables_index = (out / "tables" / "index.md").read_text().splitlines()
-    first_entries = [line for line in tables_index if line.startswith("* ")][:5]
-    assert all(any(m in e for m in ("dim_station", "fct_")) for e in first_entries)  # marts first
+    marts = {p.name.removesuffix(".parquet") for p in built.iterdir()}
+    entries = [
+        ln for ln in (out / "tables" / "index.md").read_text().splitlines() if ln.startswith("* [")
+    ]
+    listed = [ln[3:].split("]", 1)[0] for ln in entries]
+    # marts come first, then everything else
+    assert set(listed[: len(marts)]) == marts and len(marts) >= 8
     assert "## " in (out / "log.md").read_text()
+
+
+# ------------------------------------------------------------- 8.3: approved metrics
+def run_metric(bundle, built, computation, **params):
+    from rebalancer.okf.attest import run
+
+    out, _ = bundle
+    return run(out, computation, {k: str(v) for k, v in params.items()}, built)
+
+
+DAY = {"start_date": "2026-10-20", "end_date": "2026-10-20"}
+
+
+def test_every_computation_runs_and_attests(bundle, built):
+    from rebalancer.okf.attest import attest, list_computations
+
+    out, _ = bundle
+    params = {
+        "computations/empty-stations": {**DAY, "zone": "midtown", "top_n": 3},
+        "computations/full-stations": {**DAY, "zone": "all", "top_n": 3},
+        "computations/van-activity": {**DAY, "zone": "midtown"},
+        "computations/recorder-coverage": DAY,
+        "computations/busiest-stations": {
+            "start_month": "2026-09",
+            "end_month": "2026-10",
+            "zone": "all",
+            "top_n": 3,
+        },
+    }
+    assert {c["id"] for c in list_computations(out)} == set(params)
+    for cid, p in params.items():
+        receipt = run_metric(bundle, built, cid, **p)
+        verdict = attest(out, receipt, built)
+        assert verdict["ok"], (cid, verdict)
+        assert verdict["checks"]["reproduces"] is True
+
+
+def test_known_answers(bundle, built):
+    empty = run_metric(
+        bundle, built, "computations/empty-stations", **DAY, zone="midtown", top_n=1
+    )["result"]
+    # 11 minutes in the window, 3 with the recorder down: 8 recorded, all empty
+    assert empty == [
+        {"station_name": "Station E", "empty_minutes": 8, "minutes_recorded": 8, "empty_share": 1.0}
+    ]
+    vans = run_metric(bundle, built, "computations/van-activity", **DAY, zone="all")["result"]
+    assert vans[0]["drop_off_visits"] == 1 and vans[0]["bikes_dropped_off"] == 18
+    cover = run_metric(bundle, built, "computations/recorder-coverage", **DAY)["result"]
+    assert cover == [
+        {
+            "local_date": "2026-10-20",
+            "minutes_in_window": 11,
+            "minutes_recorded": 8,
+            "coverage": 0.7273,
+        }
+    ]
+    far = run_metric(bundle, built, "computations/empty-stations", **DAY, zone="downtown", top_n=5)[
+        "result"
+    ]
+    assert far == []  # every test station is in Midtown
+
+
+def test_attester_rejects_cheating(bundle, built):
+    import copy
+
+    from rebalancer.okf.attest import AttestationError, attest
+
+    out, _ = bundle
+    good = run_metric(bundle, built, "computations/empty-stations", **DAY, zone="all", top_n=3)
+
+    rewritten = copy.deepcopy(good)
+    rewritten["executed_sql"] = good["executed_sql"].replace(
+        "ORDER BY empty_minutes DESC", "ORDER BY empty_minutes ASC"
+    )
+    assert "not the sanctioned computation" in attest(out, rewritten)["reason"]
+
+    edited = copy.deepcopy(good)
+    edited["result"][0]["empty_minutes"] = 2
+    assert "altered" in attest(out, edited)["reason"]
+
+    extra = copy.deepcopy(good)
+    extra["parameters"]["region"] = "71"
+    assert "unknown parameter 'region'" in attest(out, extra)["reason"]
+
+    assert attest(out, good, claimed=8)["ok"]
+    assert "claimed value 99" in attest(out, good, claimed=99)["reason"]
+
+    with pytest.raises(AttestationError, match="not a valid date"):
+        run_metric(
+            bundle,
+            built,
+            "computations/empty-stations",
+            start_date="yesterday",
+            end_date="2026-10-20",
+            zone="all",
+            top_n=3,
+        )
+    with pytest.raises(AttestationError, match="missing required parameter 'top_n'"):
+        run_metric(bundle, built, "computations/empty-stations", **DAY, zone="all")
+    # SQL injection through a value is impossible: values are bound, not pasted in
+    sneaky = run_metric(
+        bundle, built, "computations/empty-stations", **DAY, zone="all' OR 1=1 --", top_n=3
+    )
+    assert sneaky["result"] == [] and attest(out, sneaky, built)["ok"]
+
+
+def test_changed_data_cannot_be_reproduced(bundle, built, tmp_path):
+    import shutil
+
+    from rebalancer.okf.attest import attest
+
+    out, _ = bundle
+    receipt = run_metric(bundle, built, "computations/recorder-coverage", **DAY)
+    copy_dir = tmp_path / "marts"
+    shutil.copytree(built, copy_dir)
+    import pyarrow.parquet as pq
+
+    t = pq.read_table(copy_dir / "fct_recorder_minute.parquet")
+    pq.write_table(t.slice(0, t.num_rows - 1), copy_dir / "fct_recorder_minute.parquet")
+    verdict = attest(out, receipt, copy_dir)
+    assert not verdict["ok"] and verdict["checks"]["same_data"] is False

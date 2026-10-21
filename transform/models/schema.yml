@@ -280,6 +280,101 @@ models:
       - name: runs_merged
         description: Runs of minutes merged into this visit (a rider mid-visit splits a run).
 
+  - name: agg_station_day
+    description: >
+      One row per station per New York calendar day: recorded minutes, minutes empty
+      or full, and likely van visits. The table agents should use for "which stations
+      ran empty / full / got rebalanced" questions.
+    meta:
+      grain: one row per station per New York calendar day
+      joins:
+        - {to: dim_station, using: station_id, note: "current version"}
+        - {to: dim_zone, using: "distance from the zone centre within radius_m"}
+      caveats:
+        - "Only days since recording began (2026-10-19). The first day is partial."
+        - "Empty and full minutes count only minutes the recorder was up."
+    columns:
+      - name: station_id
+        description: GBFS station UUID.
+      - name: local_date
+        description: New York calendar date.
+      - name: short_name
+        description: Station code used in trip files.
+      - name: station_name
+        description: Station name (current version).
+      - name: lat
+        description: Latitude.
+      - name: lon
+        description: Longitude.
+      - name: region_id
+        description: "Region: 71 NYC, 185 Bronx, 70 Jersey City, 311 Hoboken."
+      - name: capacity
+        description: Number of docks (current version).
+      - name: minutes_recorded
+        description: Minutes that day with the recorder up.
+      - name: empty_minutes
+        description: Recorded minutes with no bike available (and renting).
+      - name: full_minutes
+        description: Recorded minutes with no free dock (and accepting returns).
+      - name: stale_minutes
+        description: Minutes the station itself had stopped reporting.
+      - name: van_drop_offs
+        description: Likely van drop-off visits that day (see fct_inferred_rebalancing).
+      - name: van_pick_ups
+        description: Likely van pickup visits that day.
+      - name: bikes_dropped_off
+        description: Bikes added by likely van drop-offs.
+      - name: bikes_picked_up
+        description: Bikes removed by likely van pickups.
+
+  - name: agg_station_month
+    description: >
+      Rides started and ended per station per month, from the trip files (Oct 2025 –
+      Sep 2026 so far). The table agents should use for "busiest station" questions.
+    meta:
+      grain: one row per station code per month
+      stale_after_days: 35
+      joins:
+        - {to: dim_station, using: short_name, note: "current version"}
+      caveats:
+        - "Trip files lag by 2-3 weeks, so the current month is missing."
+    columns:
+      - name: short_name
+        description: Station code used in trip files.
+      - name: month
+        description: "Month, 'YYYY-MM'."
+      - name: station_id
+        description: GBFS station UUID; null if the station no longer exists.
+      - name: station_name
+        description: Station name (current version).
+      - name: lat
+        description: Latitude.
+      - name: lon
+        description: Longitude.
+      - name: region_id
+        description: Region code.
+      - name: rides_started
+        description: Rides that started at the station that month.
+      - name: rides_ended
+        description: Rides that ended at the station that month.
+
+  - name: dim_zone
+    description: Named areas (circles) used by the planner, the app and the approved metrics.
+    meta:
+      grain: one row per zone
+      stale_after_days: 365
+    columns:
+      - name: zone
+        description: "Zone name, lower case (e.g. 'midtown')."
+      - name: center_lat
+        description: Latitude of the zone's centre.
+      - name: center_lon
+        description: Longitude of the zone's centre.
+      - name: radius_m
+        description: Radius in metres; a station is in the zone if it lies within it.
+      - name: description
+        description: What the zone covers.
+
   - name: fct_recorder_minute
     description: Recording health; one row per UTC minute with whether any status poll succeeded.
     meta:

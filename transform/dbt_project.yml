@@ -4,6 +4,7 @@ config-version: 2
 profile: citibike
 
 model-paths: ["models"]
+seed-paths: ["seeds"]
 test-paths: ["tests"]
 target-path: "target"
 clean-targets: ["target", "dbt_packages"]

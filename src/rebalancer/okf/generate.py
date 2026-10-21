@@ -72,7 +72,12 @@ class Artifacts:
         return parse_time(stamp) if stamp else datetime.now(UTC)
 
     def models(self) -> dict[str, dict]:
-        return {k: v for k, v in self.manifest["nodes"].items() if v["resource_type"] == "model"}
+        """dbt models and seeds (small reference tables loaded from CSV)."""
+        return {
+            k: v
+            for k, v in self.manifest["nodes"].items()
+            if v["resource_type"] in ("model", "seed")
+        }
 
     def tests_for(self, unique_id: str) -> list[dict]:
         return [
@@ -81,7 +86,10 @@ class Artifacts:
             if n["resource_type"] == "test"
             and (
                 n.get("attached_node") == unique_id
-                or (not n.get("attached_node") and unique_id in n["depends_on"]["nodes"])
+                or (
+                    not n.get("attached_node")
+                    and unique_id in n.get("depends_on", {}).get("nodes", [])
+                )
             )
         ]
 
@@ -96,6 +104,8 @@ def meta(node: dict) -> dict:
 
 
 def layer(node: dict) -> str:
+    if node["resource_type"] == "seed":
+        return "seed"
     parts = Path(node["original_file_path"]).parts
     return next((p for p in parts if p in LAYERS), "staging")
 
@@ -170,7 +180,7 @@ def model_concept(uid: str, node: dict, art: Artifacts, verified: dict) -> tuple
         ver.append({"by": "process:dbt-tests", "at": iso(built)})
     ver += [{"by": e["by"], "at": e["at"]} for e in verified.get(f"tables/{name}", [])]
 
-    parents = node["depends_on"]["nodes"]
+    parents = node.get("depends_on", {}).get("nodes", [])
     fm = {
         "type": "Table",
         "title": name,

@@ -42,6 +42,7 @@ backtest = "rebalancer.backtest.run:main"
 backtest-all = "rebalancer.backtest.run:main_all"
 okf-validate = "rebalancer.okf.validate:main"
 okf-generate = "rebalancer.okf.generate:main"
+okf-metric = "rebalancer.okf.attest:main"
 forecast-train = "rebalancer.forecast.train:main"
 
 [project.optional-dependencies]

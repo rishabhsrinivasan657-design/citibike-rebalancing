@@ -1,0 +1,5 @@
+zone,center_lat,center_lon,radius_m,description
+midtown,40.7536,-73.9832,1500,Within 1.5 km of Bryant Park
+downtown,40.7075,-74.0110,1300,Financial District
+union square,40.7359,-73.9911,1200,Around Union Square
+williamsburg,40.7146,-73.9580,1300,Williamsburg Brooklyn
