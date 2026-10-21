@@ -401,7 +401,7 @@ Step 4 instead of averages.
 ---
 
 ## Step 8: A context layer for AI agents (OKF)
-**Status: built and tested (Oct 21, 2026). The real eval run waits for an Anthropic API key.**
+**Status: built and tested (Oct 21, 2026). The trap analysis is done; the agent eval run waits for an Anthropic API key.**
 
 **What it is:** OKF (Open Knowledge Format) is Google Cloud's open spec for giving AI
 agents business context: what each table means, how metrics are defined, how tables
@@ -476,25 +476,27 @@ been reviewed.
 - **Known limit:** only one fully recorded day exists so far (Oct 20), so the
   questions cover one or two days. More days give a broader test.
 
-### 8.6 Trap analysis (free, no AI) ⬜
+### 8.6 Trap analysis (free, no AI) ✅
 There's no Anthropic API key yet, so as a free first measurement we test the **traps**
-the context layer protects against, instead of testing an agent. For each eval question
-we compute the correct answer (approved metric) and the answer you'd get from a common
-mistake made without the bundle's definitions:
+the context layer protects against, instead of testing an agent. For each question we
+compare the correct answer (approved metric) with the same query carrying one common
+mistake. Full report: [okf/PITFALLS.md](../okf/PITFALLS.md) (re-run weekly on GitHub).
 
-| Mistake | What goes wrong |
-|---|---|
-| Using UTC dates | Days end at 8pm New York time instead of midnight |
-| Counting minutes when the recorder was down | Carried-forward values count as observed |
-| Ignoring "is the station renting?" | Closed or broken stations count as empty |
-| Ignoring "does the station accept returns?" | Out-of-service docks count as full |
-| "Minutes with data" as coverage | Carried-forward rows make coverage look like 100% |
-| A simple "6+ bikes in 3 minutes" van rule | Rush-hour riders and Jersey City count as vans |
-| Station codes as numbers | `6131.1` and `6131.10` merge into one station |
+**Results on the real data (Oct 20–21, 2026):**
+
+| Mistake | Answers changed | How far off |
+|---|---|---|
+| Simple "6+ bikes in 3 minutes" van rule | **4 of 4** | 4–11× too many van visits (80 Midtown drop-offs instead of 16) |
+| Using UTC dates instead of New York dates | **5 of 6** | usually a different "worst station"; ~22% off (median) |
+| Ignoring whether a station is renting | **2 of 3** | a closed station "wins" as empty all day (1,440 min vs 665) |
+| Ignoring whether a station accepts returns | **2 of 3** | same problem for full stations |
+| Counting minutes when the recorder was down | 0 of 6 | no gaps on these days (after the relay fix); it would matter on Oct 19 |
+| Coverage as "minutes that have data" | 0 of 2 | same; it would have hidden the 80-minute gap |
+| Station codes as numbers | 0 of 3 | no merged codes among the top stations (a unit test shows it can happen) |
 
 **Checks**
-- ⬜ Known-answer tests: each mistake changes (or doesn't change) the answer exactly as
+- ✅ Known-answer tests: every mistake changes (or doesn't change) the answer exactly as
   hand-worked on the test data.
-- ⬜ A report on the real data (okf/PITFALLS.md): for each mistake, how many questions'
-  answers change and by how much.
-- This measures the traps, not an agent. The agent eval (8.5) is still the direct test.
+- ✅ Report on the real data, saved to the repository by GitHub.
+- This measures the traps, not an agent. The agent eval (8.5) is still the direct test,
+  once an API key exists. Day 2 (Oct 21) was only partly over when this ran.
