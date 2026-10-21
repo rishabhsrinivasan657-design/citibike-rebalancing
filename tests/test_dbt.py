@@ -346,3 +346,99 @@ def test_every_model_and_mart_column_is_documented(built):
         documented = {c for c, v in models[name]["columns"].items() if v["description"].strip()}
         missing += [f"{name}.{c}" for c in actual if c not in documented]
     assert not missing, f"mart columns without a description: {missing}"
+
+
+@pytest.fixture(scope="module")
+def bundle(built, tmp_path_factory):
+    """Generate the OKF bundle from the test warehouse, like the transform workflow does."""
+    from rebalancer.okf.generate import generate
+
+    root = built.parent
+    env = {
+        **os.environ,
+        "RAW_ROOT": str(root / "raw"),
+        "LAKE_ROOT": str(root / "lake"),
+        "MARTS_ROOT": str(built),
+        "DBT_DUCKDB_PATH": str(root / "wh.duckdb"),
+        "DBT_PROFILES_DIR": str(PROJECT),
+    }
+    common = [
+        "--project-dir",
+        str(PROJECT),
+        "--target-path",
+        str(root / "target"),
+        "--log-path",
+        str(root / "logs"),
+    ]
+    import shutil
+
+    target = root / "target"
+    shutil.copy(target / "run_results.json", target / "build_results.json")  # as the workflow does
+    subprocess.run(["dbt", "docs", "generate", *common], env=env, capture_output=True, check=True)
+    # The fixture's live data is from 2026-10-20, so freshness fails: that's the point.
+    subprocess.run(["dbt", "source", "freshness", *common], env=env, capture_output=True)
+    out = tmp_path_factory.mktemp("okf") / "bundle"
+    counts = generate(root / "target", Path(__file__).parents[1] / "okf" / "static", out)
+    return out, counts
+
+
+def test_bundle_is_valid_with_no_warnings(bundle):
+    from rebalancer.okf.validate import validate
+
+    out, counts = bundle
+    rep = validate(out)
+    assert rep.ok and rep.warnings == [], rep.errors + rep.warnings
+    assert counts["tables"] >= 14 and counts["sources"] == 8
+
+
+def test_table_concept_has_schema_joins_lineage_and_trust(bundle):
+    from rebalancer.okf.generate import read_frontmatter
+
+    out, _ = bundle
+    fm = read_frontmatter(out / "tables" / "fct_station_minute.md")
+    text = (out / "tables" / "fct_station_minute.md").read_text()
+    assert fm["type"] == "Table" and "marts" in fm["tags"]
+    assert fm["resource"].endswith("/marts/fct_station_minute.parquet")
+    assert {s["resource"] for s in fm["sources"]} >= {
+        "/tables/stg_station_status.md",
+        "/tables/int_recorder_minute.md",
+    }
+    assert fm["verified"] == [{"by": "process:dbt-tests", "at": fm["generated"]["at"]}]
+    assert "| `num_bikes_available` | INTEGER | Bikes ready to rent" in text
+    assert "Joins [dim_station](/tables/dim_station.md) using `station_id`" in text
+    assert "# Caveats" in text and "carried forward" in text
+
+
+def test_live_tables_go_stale_within_hours_history_tables_within_weeks(bundle):
+    from rebalancer.okf.generate import parse_time, read_frontmatter
+
+    out, _ = bundle
+
+    def stale(name):
+        fm = read_frontmatter(out / "tables" / f"{name}.md")
+        return parse_time(str(fm["stale_after"])) - parse_time(str(fm["generated"]["at"]))
+
+    assert stale("fct_station_minute").total_seconds() == 7 * 3600
+    assert stale("fct_trips").days == 35
+
+
+def test_stale_source_is_marked_stale_and_not_verified(bundle):
+    from rebalancer.okf.generate import parse_time, read_frontmatter
+
+    out, _ = bundle
+    fm = read_frontmatter(out / "sources" / "live__poll_log.md")
+    assert parse_time(str(fm["stale_after"])) < datetime.now(UTC)  # fixture data is old
+    assert not fm.get("verified")
+    assert "status **error**" in (out / "sources" / "live__poll_log.md").read_text()
+
+
+def test_glossary_and_indexes_are_included(bundle):
+    out, _ = bundle
+    root_index = (out / "index.md").read_text()
+    assert root_index.startswith('---\nokf_version: "0.2"\n---')
+    assert "[glossary](glossary/index.md)" in root_index
+    assert (out / "glossary" / "riders-affected.md").exists()
+    tables_index = (out / "tables" / "index.md").read_text().splitlines()
+    first_entries = [line for line in tables_index if line.startswith("* ")][:5]
+    assert all(any(m in e for m in ("dim_station", "fct_")) for e in first_entries)  # marts first
+    assert "## " in (out / "log.md").read_text()

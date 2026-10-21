@@ -9,19 +9,28 @@ sources:
       - name: trips
         description: "Citi Bike trip files, one Parquet per month, as published."
         meta:
+          origin: https://s3.amazonaws.com/tripdata/index.html
+          refresh: monthly, 2-3 weeks after the month ends
           external_location: "read_parquet('{{ env_var('RAW_ROOT') }}/trips/month=*/trips.parquet', hive_partitioning = true)"
       - name: weather_observed
+        description: "Hourly Central Park weather as observed (Open-Meteo archive, ERA5-based)."
         meta:
+          origin: https://open-meteo.com/en/docs/historical-weather-api
           external_location: "read_parquet('{{ env_var('RAW_ROOT') }}/weather/observed.parquet')"
       - name: weather_forecast
+        description: "Hourly Central Park weather as it was forecast at the time (Open-Meteo historical forecasts)."
         meta:
+          origin: https://open-meteo.com/en/docs/historical-forecast-api
           external_location: "read_parquet('{{ env_var('RAW_ROOT') }}/weather/forecast.parquet')"
       - name: holidays
+        description: "US federal and New York State holidays (Python holidays package)."
         meta:
+          origin: https://pypi.org/project/holidays/
           external_location: "read_parquet('{{ env_var('RAW_ROOT') }}/holidays/holidays.parquet')"
       - name: station_hour_profile
         description: "Average departures/arrivals per station, day type and local hour (Step 2)."
         meta:
+          origin: derived from the trip files by the backfill (rebalancer.backfill.profiles)
           external_location: "read_parquet('{{ env_var('RAW_ROOT') }}/profiles/station_hour.parquet')"
 
   - name: live
@@ -31,10 +40,16 @@ sources:
     tables:
       - name: station_status
         description: "Changed stations per poll, plus a 15-minute heartbeat per station."
+        meta:
+          origin: https://gbfs.citibikenyc.com/gbfs/gbfs.json (station_status, polled every 60 s)
       - name: station_information
         description: "Full station list, published when it changes and at least daily."
+        meta:
+          origin: https://gbfs.citibikenyc.com/gbfs/gbfs.json (station_information, polled hourly)
       - name: poll_log
         description: "One row per poll attempt; the recorder's health log."
+        meta:
+          origin: the recorder (rebalancer.ingest), one row per poll
         loaded_at_field: polled_at
         freshness:
           warn_after: {count: 30, period: minute}

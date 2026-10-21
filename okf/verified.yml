@@ -1,0 +1,7 @@
+# Human reviews of bundle concepts. Add an entry only after a person has read the
+# concept and checked it against the data and the code. Keyed by concept id
+# (path inside the bundle without .md). Example:
+#
+# tables/fct_station_minute:
+#   - { by: "human:rishabh", at: "2026-10-21T20:00:00Z" }
+{}

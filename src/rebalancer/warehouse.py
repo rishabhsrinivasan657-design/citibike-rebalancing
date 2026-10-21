@@ -51,6 +51,33 @@ def push(work: Path) -> None:
         commit_message="Update marts",
         delete_patterns=["**"],
     )
+    if (work / "okf").exists():
+        api.upload_folder(
+            repo_id=history,
+            repo_type="dataset",
+            folder_path=str(work / "okf"),
+            path_in_repo="okf",
+            commit_message="Update OKF bundle",
+            delete_patterns=["**"],
+        )
+
+
+def pull_okf_log(work: Path) -> None:
+    """Fetch the previous bundle's log.md so each build adds to the history."""
+    from huggingface_hub import snapshot_download
+
+    _, token, history, _ = _api_and_repos()
+    snapshot_download(
+        history,
+        repo_type="dataset",
+        token=token,
+        local_dir=work / "okf_previous_dl",
+        allow_patterns=["okf/log.md"],
+    )
+    src = work / "okf_previous_dl" / "okf" / "log.md"
+    (work / "okf_previous").mkdir(parents=True, exist_ok=True)
+    if src.exists():
+        (work / "okf_previous" / "log.md").write_text(src.read_text())
 
 
 def push_models(work: Path) -> None:
@@ -148,7 +175,9 @@ def report(work: Path, sample: int = 10) -> str:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("command", choices=["pull", "push", "push-models", "report"])
+    parser.add_argument(
+        "command", choices=["pull", "push", "push-models", "pull-okf-log", "report"]
+    )
     parser.add_argument("--work", type=Path, default=Path("work"))
     args = parser.parse_args()
     if args.command == "pull":
@@ -157,6 +186,8 @@ def main() -> None:
         push(args.work)
     elif args.command == "push-models":
         push_models(args.work)
+    elif args.command == "pull-okf-log":
+        pull_okf_log(args.work)
     else:
         text = report(args.work)
         print(text)

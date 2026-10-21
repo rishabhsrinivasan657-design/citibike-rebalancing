@@ -35,18 +35,33 @@ jobs:
       - name: Download raw data
         run: uv run warehouse pull --work work && mkdir -p work/marts
       - name: Build tables and run data tests
-        run: uv run dbt build --project-dir transform
+        run: |
+          uv run dbt build --project-dir transform
+          # dbt overwrites run_results.json on every command; keep the build's copy
+          cp transform/target/run_results.json transform/target/build_results.json
       - name: Lineage docs
         run: uv run dbt docs generate --project-dir transform --static
-      - name: Save tables to Hugging Face
+      - name: Freshness check on live data
+        id: freshness
+        continue-on-error: true # still save tables and the bundle; fail the run at the end
+        run: uv run dbt source freshness --project-dir transform
+      - name: Generate and validate the OKF bundle
+        run: |
+          uv run warehouse pull-okf-log --work work
+          uv run okf-generate --target transform/target --out work/okf --previous-log work/okf_previous/log.md
+          uv run okf-validate work/okf --strict
+      - name: Save tables and bundle to Hugging Face
         run: uv run warehouse push --work work
       - name: Summary
         run: uv run warehouse report --work work
-      - name: Freshness check on live data (last, so tables are saved even if stale)
-        run: uv run dbt source freshness --project-dir transform
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: dbt-docs
           path: transform/target/static_index.html
           retention-days: 30
+      - name: Fail if live data was stale
+        if: steps.freshness.outcome == 'failure'
+        run: |
+          echo "The live data was stale (see the freshness step). Tables and bundle were still saved."
+          exit 1

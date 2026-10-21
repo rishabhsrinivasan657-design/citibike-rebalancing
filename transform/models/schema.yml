@@ -133,6 +133,7 @@ models:
       length, and the GBFS station each end used. Partitioned by month.
     meta:
       grain: one row per ride
+      stale_after_days: 35  # new trip files arrive monthly; live data only maps station IDs
       joins:
         - {to: dim_station, using: "start_station_id = station_id (and end_station_id)", note: "use is_current = true"}
       caveats:

@@ -41,6 +41,7 @@ warehouse = "rebalancer.warehouse:main"
 backtest = "rebalancer.backtest.run:main"
 backtest-all = "rebalancer.backtest.run:main_all"
 okf-validate = "rebalancer.okf.validate:main"
+okf-generate = "rebalancer.okf.generate:main"
 forecast-train = "rebalancer.forecast.train:main"
 
 [project.optional-dependencies]
