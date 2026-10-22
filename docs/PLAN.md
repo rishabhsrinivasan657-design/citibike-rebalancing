@@ -455,7 +455,11 @@ been reviewed.
   run a metric. **No SQL tool.**
 - ✅ Tested end to end through the MCP server: an attested answer, warnings for stale
   data and unverified definitions, refusals for unknown metrics and bad parameters.
-- ⬜ Not yet tried in your Claude Desktop. Setup guide: [AGENT.md](AGENT.md).
+- ✅ Works in Claude Desktop (Oct 21, 2026). Asked "Which Midtown stations were empty
+  the longest on October 20?", it answered through the approved metric (Madison Ave &
+  E 51 St, 665 minutes), with all attester checks passing and the "not verified by a
+  person" warning passed on. An independent query on the same data gave the same top 5.
+  Setup guide: [AGENT.md](AGENT.md).
 
 ### 8.5 Eval ⬜ (built and tested; real run pending)
 - ✅ 25 questions with answers computed by script from the approved metrics: 21
