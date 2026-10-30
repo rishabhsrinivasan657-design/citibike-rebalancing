@@ -66,7 +66,9 @@ def simulate(rep: Replay, moves: dict[str, list[int]] | None, hidden: bool = Tru
         b = float(rep.bikes[s][0])
         traj = [b]
         for t in range(1, rep.minutes + 1):
-            cap = rep.cap[s][t]
+            # Docks can leave service mid-minute (seen during van pickups), so riders and
+            # vans use the larger capacity; bikes squeezed out aren't riders turned away.
+            cap = max(rep.cap[s][t - 1], rep.cap[s][t])
             want = b + rep.rider(s, t)
             if hidden:
                 if rep.bikes[s][t - 1] == 0:
@@ -88,7 +90,7 @@ def simulate(rep: Replay, moves: dict[str, list[int]] | None, hidden: bool = Tru
                 dropped = min(m, cap - want)
                 out.van_shortfall += m - dropped
                 want += dropped
-            b = want
+            b = min(want, float(rep.cap[s][t]))
             traj.append(b)
         out.bikes[s] = traj
     return out

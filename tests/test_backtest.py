@@ -178,3 +178,23 @@ def test_combined_table_totals_and_early_evidence_note():
     assert "| vs no vans (same mornings) | 5% fewer | – | 15% fewer | 30% fewer |" in text
     assert "Only 2 morning(s) so far" in text
     assert "| Wed Oct 21 | 90 | 100 | 90 | – |" in text
+
+
+def test_capacity_falling_during_a_van_pickup_replays_exactly():
+    # Oct 22: a full 55-dock station lost bikes and docks together during a pickup
+    bikes, cap = [55, 53, 50], [55, 53, 50]
+    van = [0, -2, -3]
+    rep = Replay(
+        datetime(2026, 10, 22, 8, 46),
+        2,
+        {"s": "s"},
+        {"s": bikes},
+        {"s": cap},
+        {"s": van},
+        {"s": [0.0] * 3},
+        {"s": [0.0] * 3},
+    )
+    assert max_replay_error(rep) == 0
+    no_vans = simulate(rep, None, hidden=False)
+    assert no_vans.riders_affected == 0  # nobody was turned away
+    assert no_vans.bikes["s"] == [55, 53, 50]
