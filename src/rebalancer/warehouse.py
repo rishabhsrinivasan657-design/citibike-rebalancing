@@ -2,6 +2,7 @@
 
 warehouse pull --work ./work      # history raw/ + live lake/ from Hugging Face
 warehouse push --work ./work      # finished marts/ to the history dataset
+warehouse prune                   # free space taken by old copies of replaced files
 warehouse report --work ./work    # summary + van moves to check by hand
 """
 
@@ -10,6 +11,8 @@ from __future__ import annotations
 import argparse
 import os
 import sys
+from collections.abc import Iterable
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import duckdb
@@ -41,7 +44,36 @@ def pull(work: Path) -> None:
     )
 
 
+def stale_lfs_files(lfs_files: Iterable, keep: set[str], now: datetime, min_age: timedelta):
+    """Stored files no current file points to. Recent uploads are skipped: another job
+    may have uploaded them and not yet committed."""
+    return [
+        f
+        for f in lfs_files
+        if f.file_oid not in keep and (f.pushed_at is None or now - f.pushed_at > min_age)
+    ]
+
+
+def prune(min_age: timedelta = timedelta(hours=2)) -> None:
+    """Hugging Face keeps every old copy of every file. Each transform rewrites ~3.4 GB
+    of marts, so old copies filled the 100 GB private limit in a week (Oct 2026). The
+    marts are rebuilt from raw/ each run, so old copies are never needed."""
+    api, _, history, _ = _api_and_repos()
+    keep = {
+        f.lfs.sha256
+        for f in api.list_repo_tree(history, repo_type="dataset", recursive=True)
+        if getattr(f, "lfs", None)
+    }
+    stale = stale_lfs_files(
+        api.list_lfs_files(history, repo_type="dataset"), keep, datetime.now(UTC), min_age
+    )
+    if stale:
+        api.permanently_delete_lfs_files(history, stale, repo_type="dataset")
+    print(f"pruned {len(stale)} old copies ({sum(f.size for f in stale) / 1e9:.1f} GB)")
+
+
 def push(work: Path) -> None:
+    prune()  # make room first
     api, _, history, _ = _api_and_repos()
     api.upload_folder(
         repo_id=history,
@@ -60,6 +92,7 @@ def push(work: Path) -> None:
             commit_message="Update OKF bundle",
             delete_patterns=["**"],
         )
+    prune()  # the copies this upload just replaced (all from earlier runs)
 
 
 def pull_okf_log(work: Path) -> None:
@@ -176,7 +209,7 @@ def report(work: Path, sample: int = 10) -> str:
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
-        "command", choices=["pull", "push", "push-models", "pull-okf-log", "report"]
+        "command", choices=["pull", "push", "push-models", "pull-okf-log", "prune", "report"]
     )
     parser.add_argument("--work", type=Path, default=Path("work"))
     args = parser.parse_args()
@@ -188,6 +221,8 @@ def main() -> None:
         push_models(args.work)
     elif args.command == "pull-okf-log":
         pull_okf_log(args.work)
+    elif args.command == "prune":
+        prune()
     else:
         text = report(args.work)
         print(text)

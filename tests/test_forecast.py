@@ -190,3 +190,34 @@ def test_recent_rows_weigh_more(con):
         con, "w", f"hour_local < '{train.TRAIN_END}'", train.FEATURES_V2, None, train.TRAIN_END, 120
     )
     assert w.max() <= 1.0 and w.min() < 0.8  # June rows count less than late July
+
+
+def test_weather_fetch_retries_after_a_timeout(monkeypatch):
+    import httpx
+
+    from rebalancer.forecast import predict
+
+    monkeypatch.setattr(predict.time, "sleep", lambda s: None)
+    calls = []
+
+    def handler(request):
+        calls.append(request)
+        if len(calls) < 3:
+            raise httpx.ConnectTimeout("handshake timed out")
+        return httpx.Response(
+            200,
+            json={
+                "hourly": {
+                    "time": ["2026-10-20T12:00"],
+                    "temperature_2m": [15.0],
+                    "precipitation": [0.0],
+                    "snowfall": [0.0],
+                    "wind_speed_10m": [10.0],
+                }
+            },
+        )
+
+    with httpx.Client(transport=httpx.MockTransport(handler)) as client:
+        weather = predict.fetch_weather(client, date(2026, 10, 20))
+    assert len(calls) == 3
+    assert list(weather.values()) == [(15.0, 0.0, 0.0, 10.0)]

@@ -6,6 +6,7 @@ historical-forecast archive (what was forecast at the time) for past days.
 
 from __future__ import annotations
 
+import time
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
@@ -37,8 +38,9 @@ def daylight_hours(day: date) -> float:
     return 24 / math.pi * math.acos(-math.tan(math.radians(NYC_LAT)) * math.tan(decl))
 
 
-def fetch_weather(client: httpx.Client, day: date) -> Weather:
-    """Hourly forecast weather around a New York calendar day, keyed by UTC hour."""
+def fetch_weather(client: httpx.Client, day: date, retries: int = 4) -> Weather:
+    """Hourly forecast weather around a New York calendar day, keyed by UTC hour.
+    Retries with backoff: one Open-Meteo timeout failed the weekly verify (Oct 2026)."""
     lat, lon = CENTRAL_PARK
     recent = day >= date.today() - timedelta(days=1)
     params = {
@@ -56,8 +58,15 @@ def fetch_weather(client: httpx.Client, day: date) -> Weather:
                 "end_date": (day + timedelta(days=1)).isoformat(),
             }
         )
-    resp = client.get(LIVE_URL if recent else ARCHIVE_URL, params=params)
-    resp.raise_for_status()
+    for attempt in range(retries):
+        try:
+            resp = client.get(LIVE_URL if recent else ARCHIVE_URL, params=params)
+            resp.raise_for_status()
+            break
+        except httpx.HTTPError:
+            if attempt + 1 == retries:
+                raise
+            time.sleep(2**attempt)
     h = resp.json()["hourly"]
     return {
         datetime.fromisoformat(t).replace(tzinfo=UTC): (
