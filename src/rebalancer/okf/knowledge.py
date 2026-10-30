@@ -158,5 +158,10 @@ class KnowledgeBase:
                 "executor": receipt["executor"],
             },
             "verdict": verdict,
-            "warnings": self._warnings(comp),
+            "warnings": self._warnings(comp)
+            + (
+                []
+                if receipt["result"]
+                else ["No rows matched: check the zone and that the dates are within the data."]
+            ),
         }

@@ -74,3 +74,26 @@ See [missing](/tables/nope.md) and [web](https://example.com).
     assert "broken link to /tables/nope.md" in warnings
     assert "example.com" not in warnings  # external links aren't checked
     assert "verified" not in warnings  # the human: verification is well formed
+
+
+def test_server_refreshes_on_start_and_keeps_stdout_clean(tmp_path, monkeypatch, capsys):
+    from rebalancer.okf import server
+
+    calls = []
+    monkeypatch.setattr(server, "sync", lambda dest: calls.append(dest))
+    monkeypatch.setattr(server, "KnowledgeBase", lambda *a: None)
+    monkeypatch.setattr(
+        server, "build_server", lambda kb: type("S", (), {"run": lambda self, how: None})()
+    )
+    bundle = tmp_path / "okf"
+    bundle.mkdir()
+    monkeypatch.setattr("sys.argv", ["okf-mcp", "--bundle", str(bundle)])
+    server.main()
+    assert calls == [server.CACHE]
+
+    def offline(dest):
+        raise OSError("no network")
+
+    monkeypatch.setattr(server, "sync", offline)
+    server.main()  # a saved bundle still serves when Hugging Face can't be reached
+    assert capsys.readouterr().out == ""

@@ -56,7 +56,7 @@ def build_server(kb: KnowledgeBase):
         return kb.list_metrics()
 
     @server.tool()
-    def run_metric(computation: str, parameters: dict[str, str]) -> dict:
+    def run_metric(computation: str, parameters: dict[str, str | int]) -> dict:
         """Run an approved metric, e.g. computation='computations/empty-stations' with
         parameters {start_date, end_date, zone, top_n}. Returns the result, a receipt,
         the attester's verdict and warnings. Only report results when ok is true."""
@@ -93,7 +93,7 @@ def sync(dest: Path, with_minutes: bool = False) -> None:
             ),
         ],
     )
-    print(f"bundle and marts saved to {dest}")
+    print(f"bundle and marts saved to {dest}", file=sys.stderr)  # stdout is the MCP channel
 
 
 def main() -> None:
@@ -101,8 +101,12 @@ def main() -> None:
     parser.add_argument("--bundle", type=Path, default=CACHE / "okf")
     parser.add_argument("--data", type=Path, default=CACHE / "marts")
     args = parser.parse_args()
-    if not args.bundle.exists():
-        sync(CACHE)
+    try:
+        sync(CACHE)  # a client may stay connected for weeks: start from the newest data
+    except Exception as exc:
+        if not args.bundle.exists():
+            raise
+        print(f"keeping the saved bundle, couldn't update it: {exc}", file=sys.stderr)
     build_server(KnowledgeBase(args.bundle, args.data)).run("stdio")
 
 
