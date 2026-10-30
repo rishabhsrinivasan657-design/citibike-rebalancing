@@ -50,11 +50,15 @@ flowchart LR
 
 ## Results so far
 
-On the first fully recorded weekday morning (Tue Oct 20, 8–9am, Midtown, 3 vans), our
-plan would have left **18% fewer riders without a bike or a dock** than no vans, while
-Lyft's detected van visits that hour made no measurable difference. **One morning is
-early evidence, not a verdict**; the weekly job adds every new morning to
-[docs/RESULTS.md](docs/RESULTS.md).
+Across 9 fully recorded weekday mornings (Oct 20–30, 8–9am, Midtown, 3 vans), our plan
+would have left about **14% fewer riders without a bike or a dock** than a replay with
+no detected vans (1,703 vs 1,990, an estimate). **Nine mornings is early evidence, not a
+verdict**; the weekly job adds every new morning to [docs/RESULTS.md](docs/RESULTS.md).
+
+This does not show the plan beats Lyft. Lyft's column ties with "no vans" every morning
+because the detector only sees moves of 7+ bikes: 21 station visits and 233 bikes in 9
+mornings, 16 of the 21 starting after 8:30, at stations that didn't run out either way.
+Lyft's smaller moves look like riders, so they stay in both columns.
 
 ## Things that went wrong, and what they taught (details in [docs/PLAN.md](docs/PLAN.md))
 
@@ -71,7 +75,7 @@ early evidence, not a verdict**; the weekly job adds every new morning to
 
 ## Limits
 
-- Results so far rest on a few recorded mornings; the claim grows weekly.
+- Results so far rest on 9 recorded mornings; the claim grows weekly.
 - Riders turned away are counted as missed; some would walk to a nearby station.
 - Lyft may rebalance in ways the detector can't see (e.g. staff docking extra bikes),
   so "what Lyft did" is likely understated. Final check against October's trips once
@@ -93,7 +97,7 @@ gh workflow run verify.yml          # verify every recorded morning (also weekly
 gh workflow run coverage.yml        # recorder coverage (also daily)
 ```
 
-Locally: `make install`, `make test` (105 tests), `make test-dbt`, and
+Locally: `make install`, `make test` (116 tests), `make test-dbt`, and
 `uv run --extra app streamlit run app/streamlit_app.py` (needs `HF_TOKEN`).
 The streaming version runs with `make up` (Redpanda + collector + lake sink in Docker).
 
