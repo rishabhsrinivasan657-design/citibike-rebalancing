@@ -23,7 +23,9 @@ env:
   DBT_DUCKDB_PATH: ${{ github.workspace }}/work/warehouse.duckdb
   OKF_DATA_URI: ${{ vars.OKF_DATA_URI }}  # optional; see docs/USER_MANUAL.md
   DUCKDB_MEMORY_LIMIT: 10GB
-  DUCKDB_THREADS: "4"
+  # dbt builds one table at a time (DuckDB still uses every core within it). With 4,
+  # fct_trips and fct_station_minute shared the 10 GB and ran out of memory (Nov 3).
+  DUCKDB_THREADS: "1"
 
 jobs:
   build:
@@ -31,6 +33,10 @@ jobs:
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v5
+      - name: Free disk space for DuckDB to spill to
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
+          df -h /
       - uses: astral-sh/setup-uv@v6
       - run: uv sync --frozen --no-dev --group transform
       - name: Download raw data
