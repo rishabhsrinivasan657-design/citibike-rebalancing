@@ -14,7 +14,7 @@ Weekday mornings with no recorder gaps: **19**. Riders who'd find no bike or no 
 | Thu Oct 29 | 240 | 240 | 204 | 217 |
 | Fri Oct 30 | 119 | 119 | 90 | 90 |
 | Mon Nov 02 | 381 | 381 | 345 | 351 |
-| Wed Nov 04 | 290 | 284 | 246 | 250 |
+| Wed Nov 04 | 290 | 284 | 246 | 251 |
 | Thu Nov 05 | 294 | 294 | 254 | 258 |
 | Fri Nov 06 | 46 | 46 | 46 | 39 |
 | Mon Nov 09 | 392 | 406 | 359 | 356 |
@@ -23,7 +23,7 @@ Weekday mornings with no recorder gaps: **19**. Riders who'd find no bike or no 
 | Fri Nov 13 | 101 | 101 | 65 | 75 |
 | Mon Nov 16 | 565 | 562 | 480 | 495 |
 | Tue Nov 17 | 160 | 159 | 134 | 133 |
-| **Total** | **4850** | **4851** | **4174** | **4232** |
+| **Total** | **4850** | **4851** | **4174** | **4233** |
 | vs no vans (same mornings) | 0% fewer | – | 14% fewer | 13% fewer |
 
 Every replay reproduces the recorded bike counts exactly before any what-if is applied. Assumptions are listed in docs/PLAN.md, Step 6.
