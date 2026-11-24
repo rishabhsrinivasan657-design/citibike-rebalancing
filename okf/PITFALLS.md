@@ -4,42 +4,42 @@ No AI involved. For each question, the **correct** answer comes from the approve
 
 | Mistake | Answers changed | Typical error when changed |
 |---|---|---|
-| Using UTC dates (days end at 8pm New York time) | **3 of 6** | 6% off (median) |
+| Using UTC dates (days end at 8pm New York time) | **4 of 6** | 12% off (median) |
 | Counting minutes when the recorder was down | **0 of 6** | – |
-| Ignoring whether the station is renting | **3 of 3** | 272% off (median) |
-| Ignoring whether the station accepts returns | **2 of 3** | 138% off (median) |
+| Ignoring whether the station is renting | **2 of 3** | 1644% off (median) |
+| Ignoring whether the station accepts returns | **2 of 3** | 212% off (median) |
 | Coverage as 'minutes that have data' | **0 of 2** | – |
-| A simple '6+ bikes in 3 minutes' van rule, all regions | **4 of 4** | 249% off (median) |
+| A simple '6+ bikes in 3 minutes' van rule, all regions | **4 of 4** | 207% off (median) |
 | Station codes treated as numbers | **0 of 3** | – |
 
 ## Per question
 
 | Question | Correct (approved metric) | Mistake | Mistaken answer | Changed? |
 |---|---|---|---|---|
-| Station empty longest, midtown, 2026-11-16 | E 53 St & Madison Ave (387) | Using UTC dates (days end at 8pm New York time) | W 42 St & Dyer Ave (278) | **yes** |
-| Station empty longest, midtown, 2026-11-16 | E 53 St & Madison Ave (387) | Counting minutes when the recorder was down | E 53 St & Madison Ave (387) | no |
-| Station empty longest, midtown, 2026-11-16 | E 53 St & Madison Ave (387) | Ignoring whether the station is renting | Broadway & W 41 St / E 51 St & 1 Ave … (1440) | **yes** |
-| Station empty longest, all, 2026-11-16 | Snyder Ave & Schenectady Ave (1440) | Using UTC dates (days end at 8pm New York time) | Snyder Ave & Schenectady Ave (1440) | no |
-| Station empty longest, all, 2026-11-16 | Snyder Ave & Schenectady Ave (1440) | Counting minutes when the recorder was down | Snyder Ave & Schenectady Ave (1440) | no |
-| Station empty longest, all, 2026-11-16 | Snyder Ave & Schenectady Ave (1440) | Ignoring whether the station is renting | 18 St & 27 Ave / 2 Ave & 32 St … (1440) | **yes** |
-| Station empty longest, downtown, 2026-11-15 | Little West St & 1 Pl (4) | Using UTC dates (days end at 8pm New York time) | Little West St & 1 Pl (4) | no |
-| Station empty longest, downtown, 2026-11-15 | Little West St & 1 Pl (4) | Counting minutes when the recorder was down | Little West St & 1 Pl (4) | no |
-| Station empty longest, downtown, 2026-11-15 | Little West St & 1 Pl (4) | Ignoring whether the station is renting | St James Pl & Oliver St / Vesey St & Church St … (1440) | **yes** |
-| Station full longest, midtown, 2026-11-16 | E 47 St & Park Ave (641) | Using UTC dates (days end at 8pm New York time) | E 47 St & Park Ave (622) | **yes** |
-| Station full longest, midtown, 2026-11-16 | E 47 St & Park Ave (641) | Counting minutes when the recorder was down | E 47 St & Park Ave (641) | no |
-| Station full longest, midtown, 2026-11-16 | E 47 St & Park Ave (641) | Ignoring whether the station accepts returns | Broadway & W 41 St / E 51 St & 1 Ave … (1440) | **yes** |
-| Station full longest, all, 2026-11-15 | 100 St & Humphreys St / 44 St & 2 Ave … (1440) | Using UTC dates (days end at 8pm New York time) | 44 St & 2 Ave / 55 Ave & 97 Pl … (1440) | no |
-| Station full longest, all, 2026-11-15 | 100 St & Humphreys St / 44 St & 2 Ave … (1440) | Counting minutes when the recorder was down | 100 St & Humphreys St / 44 St & 2 Ave … (1440) | no |
-| Station full longest, all, 2026-11-15 | 100 St & Humphreys St / 44 St & 2 Ave … (1440) | Ignoring whether the station accepts returns | 100 St & Humphreys St / 18 St & 27 Ave … (1440) | no |
-| Station full longest, union square, 2026-11-16 | E 10 St & 5 Ave (575) | Using UTC dates (days end at 8pm New York time) | E 10 St & 5 Ave (608) | **yes** |
-| Station full longest, union square, 2026-11-16 | E 10 St & 5 Ave (575) | Counting minutes when the recorder was down | E 10 St & 5 Ave (575) | no |
-| Station full longest, union square, 2026-11-16 | E 10 St & 5 Ave (575) | Ignoring whether the station accepts returns | W 15 St & 7 Ave (1440) | **yes** |
-| Van drop-off visits, midtown, 2026-11-16 | 14 | A simple '6+ bikes in 3 minutes' van rule, all regions | 55 | **yes** |
-| Van pickup visits, all, 2026-11-15 | 19 | A simple '6+ bikes in 3 minutes' van rule, all regions | 82 | **yes** |
-| Bikes dropped off by vans, all, 2026-11-16 | 443 | A simple '6+ bikes in 3 minutes' van rule, all regions | 1054 | **yes** |
-| Stations visited by vans, all, 2026-11-15 | 40 | A simple '6+ bikes in 3 minutes' van rule, all regions | 122 | **yes** |
-| Recorder coverage, 2026-11-16 | 1 | Coverage as 'minutes that have data' | 1 | no |
-| Recorder coverage, 2026-11-15 | 1 | Coverage as 'minutes that have data' | 1 | no |
+| Station empty longest, midtown, 2026-11-23 | E 53 St & Madison Ave (669) | Using UTC dates (days end at 8pm New York time) | E 53 St & Madison Ave (588) | **yes** |
+| Station empty longest, midtown, 2026-11-23 | E 53 St & Madison Ave (669) | Counting minutes when the recorder was down | E 53 St & Madison Ave (669) | no |
+| Station empty longest, midtown, 2026-11-23 | E 53 St & Madison Ave (669) | Ignoring whether the station is renting | 6 Ave & W 34 St / Broadway & W 41 St … (1440) | **yes** |
+| Station empty longest, all, 2026-11-23 | E 174 St & Longfellow Ave (1440) | Using UTC dates (days end at 8pm New York time) | Arlington Ave & Wilkinson Ave / E 174 St & Longfellow Ave (1440) | no |
+| Station empty longest, all, 2026-11-23 | E 174 St & Longfellow Ave (1440) | Counting minutes when the recorder was down | E 174 St & Longfellow Ave (1440) | no |
+| Station empty longest, all, 2026-11-23 | E 174 St & Longfellow Ave (1440) | Ignoring whether the station is renting | 10 Ave & W 215 St / 18 St & 27 Ave … (1440) | no |
+| Station empty longest, downtown, 2026-11-22 | Centre St & Chambers St (44) | Using UTC dates (days end at 8pm New York time) | Centre St & Chambers St (65) | **yes** |
+| Station empty longest, downtown, 2026-11-22 | Centre St & Chambers St (44) | Counting minutes when the recorder was down | Centre St & Chambers St (44) | no |
+| Station empty longest, downtown, 2026-11-22 | Centre St & Chambers St (44) | Ignoring whether the station is renting | Vesey St & Church St / Vesey St & Greenwich St (1440) | **yes** |
+| Station full longest, midtown, 2026-11-23 | E 47 St & Park Ave (561) | Using UTC dates (days end at 8pm New York time) | 1 Ave & E 42 St (608) | **yes** |
+| Station full longest, midtown, 2026-11-23 | E 47 St & Park Ave (561) | Counting minutes when the recorder was down | E 47 St & Park Ave (561) | no |
+| Station full longest, midtown, 2026-11-23 | E 47 St & Park Ave (561) | Ignoring whether the station accepts returns | 6 Ave & W 34 St / Broadway & W 41 St … (1440) | **yes** |
+| Station full longest, all, 2026-11-22 | 21 Ave & 80 St / 55 Ave & 97 Pl … (1440) | Using UTC dates (days end at 8pm New York time) | 21 Ave & 80 St / 55 Ave & 97 Pl … (1440) | no |
+| Station full longest, all, 2026-11-22 | 21 Ave & 80 St / 55 Ave & 97 Pl … (1440) | Counting minutes when the recorder was down | 21 Ave & 80 St / 55 Ave & 97 Pl … (1440) | no |
+| Station full longest, all, 2026-11-22 | 21 Ave & 80 St / 55 Ave & 97 Pl … (1440) | Ignoring whether the station accepts returns | 18 St & 27 Ave / 2 Ave & 36 St … (1440) | no |
+| Station full longest, union square, 2026-11-23 | MacDougal St & Washington Sq (391) | Using UTC dates (days end at 8pm New York time) | LaGuardia Pl & W 3 St (436) | **yes** |
+| Station full longest, union square, 2026-11-23 | MacDougal St & Washington Sq (391) | Counting minutes when the recorder was down | MacDougal St & Washington Sq (391) | no |
+| Station full longest, union square, 2026-11-23 | MacDougal St & Washington Sq (391) | Ignoring whether the station accepts returns | W 15 St & 7 Ave (1440) | **yes** |
+| Van drop-off visits, midtown, 2026-11-23 | 8 | A simple '6+ bikes in 3 minutes' van rule, all regions | 55 | **yes** |
+| Van pickup visits, all, 2026-11-22 | 17 | A simple '6+ bikes in 3 minutes' van rule, all regions | 60 | **yes** |
+| Bikes dropped off by vans, all, 2026-11-23 | 449 | A simple '6+ bikes in 3 minutes' van rule, all regions | 1055 | **yes** |
+| Stations visited by vans, all, 2026-11-22 | 46 | A simple '6+ bikes in 3 minutes' van rule, all regions | 120 | **yes** |
+| Recorder coverage, 2026-11-23 | 1 | Coverage as 'minutes that have data' | 1 | no |
+| Recorder coverage, 2026-11-22 | 1 | Coverage as 'minutes that have data' | 1 | no |
 | Busiest station, all, 2026-09..2026-09 | W 21 St & 6 Ave (34637) | Station codes treated as numbers | W 21 St & 6 Ave (34637) | no |
 | Busiest station, midtown, 2026-08..2026-09 | W 31 St & 7 Ave (60737) | Station codes treated as numbers | W 31 St & 7 Ave (60737) | no |
 | Busiest station, williamsburg, 2026-09..2026-09 | Metropolitan Ave & Bedford Ave (24175) | Station codes treated as numbers | Metropolitan Ave & Bedford Ave (24175) | no |
